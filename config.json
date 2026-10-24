@@ -1,7 +1,7 @@
 {
   "level": 0,
   "minC": 30,
-  "maxC": 60,
+  "maxC": 30,
   "minPct": 10,
   "interval": 60,
   "session": 3600,
