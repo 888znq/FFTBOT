@@ -224,8 +224,8 @@
     function tcSigText(s) {
         return [getPairDisplayName(s.pair), 'C' + s.c, 'R' + s.r, 'X' + s.s1 + '-X' + s.s2, s.c1, s.c2, s.pct + '%'].join(' | ');
     }
-    /* ONE signal per scan: the nearest one (soonest row tick), ties go to the best pct x c1.
-       Locked until the next scan. A signal with a trade still waiting for its result is kept until that result is painted. */
+    /* The selected signal stays until a challenger that passes the filters has a strictly higher pct x c1, or until it fails the filters.
+       A signal with a trade still waiting for its result is kept until that result is painted. */
     function tcUpdateSignal(prices, fin, sEnd) {
         var start = startTs(), best = null, lst;
         if (TC.sessStart !== start) {
