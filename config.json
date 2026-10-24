@@ -1,0 +1,12 @@
+{
+  "level": 0,
+  "minC": 60,
+  "maxC": 60,
+  "minPct": 0,
+  "interval": 60,
+  "session": 3600,
+  "autoStake": 1.0,
+  "auto": true,
+  "symbol": "1HZ10V",
+  "r0Only": false
+}
