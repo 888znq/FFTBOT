@@ -1,0 +1,444 @@
+/* ===== WallSpectrum UI ===== */
+:root {
+    --bg-base: #000432;
+    --bg-panel: #000432;
+    --accent-green: #2ED573;
+    --accent-red: #E63946;
+    --text-primary: #E2E8F0;
+    --border: #E2E8F0;
+    --neon-glow: 0 0 10px rgba(46, 213, 115, 0.4);
+    --filter-bg: #000432;
+    --filter-active: rgba(46, 213, 115, 0.2);
+    --chart-bg: #000432;
+}
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html { height: 100%; background: var(--bg-base) !important; }
+body { background: var(--bg-base) !important; color: var(--text-primary); font-family: 'Inter', 'JetBrains Mono', monospace; height: calc(100% - 2px); margin: 1px 0; display: block; overflow: hidden; padding: 0; border: 1px solid var(--bg-base) !important; }
+
+#main-container { height: 100%; display: grid; grid-template-columns: 1fr 80px 35px 340px; grid-template-rows: 1fr; overflow: hidden; position: relative; }
+#canvas-viewport { grid-column: 1; grid-row: 1; overflow: hidden; background: var(--bg-base); position: relative; touch-action: none; }
+#matrixCanvas { display: block; position: absolute; top: 0; left: 0; }
+#h-scroll-track { position: absolute; width: 1px; height: 1px; top: -10px; left: -10px; opacity: 0; pointer-events: none; overflow: auto; }
+#h-spacer { width: 1px; height: 1px; }
+
+#streakPanel { grid-column: 2; grid-row: 1; background: var(--bg-panel); border-left: 1px solid var(--border); border-right: none; overflow: hidden; height: 100%; position: relative; display: flex; flex-direction: column; }
+#app3-mainContainer { flex: 1; position: relative; overflow: hidden; display: flex; flex-direction: column; }
+#row-index-panel { grid-column: 3; grid-row: 1; background: var(--bg-panel); border-left: none; overflow: hidden; height: 100%; position: relative; display: flex; flex-direction: column; }
+#streakPanel, #row-index-panel { align-self: start; height: calc(100% - var(--tc-padb, 0px)) !important; border-bottom: 1px solid #E2E8F0; box-sizing: border-box; }
+
+#app3-mainContainer .app3-list-row { height: auto !important; flex: 1 1 0; min-height: 0; border-bottom: 1px solid var(--bg-base); }
+#app3-mainContainer .app3-list-col { font-size: var(--sp-fs, 10px) !important; line-height: 1; overflow: hidden; }
+#row-index-panel .idx-cell { height: auto !important; flex: 1 1 0; min-height: 0; font-size: var(--sp-fs, 10px) !important; line-height: 1; overflow: hidden; }
+.idx-cell { display: flex; align-items: center; justify-content: center; border-bottom: 1px solid var(--bg-base); background: #E2E8F0; color: var(--bg-base); font-weight: 700; }
+.app3-list-row { display: flex; width: 100%; border-bottom: 1px solid var(--bg-base); cursor: pointer; transition: background 0.1s ease; }
+.app3-list-row:hover { filter: brightness(1.12); }
+.app3-list-col { flex: 1; display: flex; align-items: center; justify-content: center; font-weight: 700; border-right: none; }
+.app3-red-side { color: var(--bg-base); background: var(--accent-red); border-right: 1px solid var(--bg-base); }
+.app3-green-side { color: var(--bg-base); background: var(--accent-green); border-right: none; }
+
+#wall-finder-pane { grid-column: 4; grid-row: 1; border-left: 1px solid var(--border); background: var(--bg-base); display: flex; flex-direction: column; position: relative; z-index: 10; overflow: hidden; }
+.peaks-container { display: flex; flex-direction: column; width: 100%; height: 100%; background-color: var(--bg-base); }
+
+.ctrl-row { display: flex; align-items: center; gap: 4px; padding: 6px 6px; background: var(--bg-panel); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.ctrl-input { background: #E2E8F0; border: 1px solid var(--bg-base); color: var(--bg-base); font-family: 'JetBrains Mono', monospace; font-weight: 800; padding: 0 8px; border-radius: 2px; outline: none; height: 28px; box-sizing: border-box; font-size: 11px; }
+.ctrl-select { padding: 0 6px; }
+.ctrl-row > span:has(.ctrl-input) { flex: 1 1 0 !important; min-width: 0; }
+.ctrl-row > span:has(.ctrl-input) > .ctrl-input { width: 100% !important; }
+
+.table-wrapper { flex: 1; overflow-y: auto; width: 100%; position: relative; scrollbar-width: none; -ms-overflow-style: none; }
+.table-wrapper::-webkit-scrollbar { display: none; }
+body.tc-solo #main-container { grid-template-columns: 1fr 340px; }
+body.tc-solo #streakPanel, body.tc-solo #row-index-panel { display: none !important; }
+body.tc-solo #wall-finder-pane { grid-column: 2; }
+
+table { width: 100%; border-collapse: collapse; text-align: left; font-size: 12px; font-family: 'Inter', 'JetBrains Mono', monospace; table-layout: fixed; }
+thead { display: table-header-group; }
+th, td { padding: 5px 7px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.highlight-gem { border-left: 1px solid transparent; cursor: pointer; transition: background 0.2s; }
+.row-red { background-color: var(--accent-red); color: var(--bg-base); }
+.row-red td, .row-green td { border-right-color: var(--bg-base) !important; border-bottom: 1px solid var(--bg-base); }
+.row-red:hover { filter: brightness(1.12); }
+.row-green { background-color: var(--accent-green); color: var(--bg-base); }
+.row-green:hover { filter: brightness(1.12); }
+
+::-webkit-scrollbar { width: 16px; height: 16px; }
+::-webkit-scrollbar-thumb { background: var(--accent-green) !important; border: 3px solid var(--bg-base); border-radius: 2px; box-shadow: var(--neon-glow); }
+::-webkit-scrollbar-track { background: var(--bg-base); }
+
+/* ----- modals ----- */
+#app3-modalOverlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg-base); backdrop-filter: blur(6px); z-index: 2001; }
+#app3-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 90vw; max-width: 380px; height: 480px; background: var(--bg-base); border: 1px solid var(--border); z-index: 2002; flex-direction: column; border-radius: 2px; overflow: hidden; }
+.app3-modal-stat-row { padding: 9px 14px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; font-weight: 700; font-size: 12px; letter-spacing: 0.06em; }
+#app3-modal ::-webkit-scrollbar { width: 2px; }
+#app3-modal ::-webkit-scrollbar-track { background: transparent; }
+#app3-modal ::-webkit-scrollbar-thumb { background: var(--border); }
+
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal) { background: #E2E8F0 !important; border-color: var(--bg-base) !important; }
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal),
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal) * { color: var(--bg-base) !important; }
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal) * { border-color: var(--bg-base) !important; }
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal) :where(div)[style*="background"] { background: transparent !important; }
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal) :where(button) { background: #FFFFFF !important; border: 1px solid var(--bg-base) !important; cursor: pointer; }
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal) :where(button)[style*="background:none"],
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal) :where(button)[style*="background: none"],
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal) :where(button)[style*="background:transparent"],
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal) :where(button)[style*="background: transparent"] { background: transparent !important; border: none !important; }
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal) [style*="color:#00B0FF"] { background: #00B0FF !important; padding: 0 4px; border-radius: 2px; }
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal) [style*="color:var(--accent-green)"],
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal) [style*="color: var(--accent-green)"],
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal) [style*="color:#2ED573"],
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal) [style*="color: #2ED573"],
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal) [style*="background:var(--accent-green)"],
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal) [style*="background: var(--accent-green)"],
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal) [style*="46,213,115"],
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal) [style*="46, 213, 115"] { background: var(--accent-green) !important; padding: 0 4px; border-radius: 2px; }
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal) [style*="color:var(--accent-red)"],
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal) [style*="color: var(--accent-red)"],
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal) [style*="color:#E63946"],
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal) [style*="color: #E63946"],
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal) [style*="background:var(--accent-red)"],
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal) [style*="background: var(--accent-red)"],
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal) [style*="230,57,70"],
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal) [style*="230, 57, 70"] { background: var(--accent-red) !important; padding: 0 4px; border-radius: 2px; }
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal) [style*="color:#FFD700"],
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal) [style*="color: #FFD700"],
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal) [style*="255,215,0"],
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal) [style*="255, 215, 0"] { background: #FFD700 !important; padding: 0 4px; border-radius: 2px; }
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal) > div:first-child { background: #FFD700 !important; }
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal) > div:first-child [style*="color"],
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal) > div:first-child [style*="background"] { background: transparent !important; }
+:is([style*="translate(-50%,-50%)"],[style*="translate(-50%, -50%)"],#app3-modal) ::-webkit-scrollbar-track { background: #CBD5E1 !important; }
+
+#accountBalance { background: #FFD700 !important; color: var(--bg-base) !important; padding: 0 6px !important; border-radius: 2px; align-self: stretch; display: flex !important; align-items: center; justify-content: center; border: 1px solid transparent; font-family: 'JetBrains Mono', monospace; font-size: 14px !important; font-weight: 800; }
+#accountBalance[style*="14, 203, 129"] { background: #0ecb81 !important; }
+
+/* ----- boot overlay: pair tile + log in one pill ----- */
+body #bootOverlay #bootLogBox { background: #E2E8F0 !important; border-color: var(--bg-base) !important; }
+body #bootOverlay #bootLogLines div { color: var(--bg-base) !important; }
+body #bootPairGrid div { background: #E2E8F0 !important; color: var(--bg-base) !important; }
+html body #bootPairGrid div[data-pc] { background: var(--pbg) !important; color: var(--pfg) !important; border-color: var(--pbc) !important; -webkit-text-fill-color: var(--pfg) !important; }
+#bootOverlay { background: #000432 !important; }
+#bootLogBox { border-color: #2A3A8F !important; background: transparent !important; }
+
+/* ----- chart tooltip + misc ----- */
+#tcWrap > div[style*="pointer-events"] { background: #E2E8F0 !important; border-color: var(--bg-base) !important; }
+#tcWrap > div[style*="pointer-events"] * { color: var(--bg-base) !important; }
+#tcWrap > div[style*="pointer-events"] [style*="color:#2ED573"] { background: var(--accent-green); padding: 0 4px; border-radius: 2px; }
+#tcWrap > div[style*="pointer-events"] [style*="color:#E63946"] { background: var(--accent-red); padding: 0 4px; border-radius: 2px; }
+#tcWrap > div[style*="pointer-events"] [style*="color:#FFD700"] { background: #FFD700; padding: 0 4px; border-radius: 2px; }
+#wall-finder-pane div[style*="letter-spacing:0.4em"] { background: #E2E8F0 !important; color: var(--bg-base) !important; }
+#peaksTableBodyRev td[colspan], #peaksTableBodyMom td[colspan] { background: #E2E8F0 !important; color: var(--bg-base) !important; }
+.row-red *, .row-green * { color: var(--bg-base) !important; }
+.ctrl-row > span:has(.ctrl-input) > span { color: var(--bg-base) !important; }
+#levelFilterSelect, #sessionLengthSelect, .ctrl-row .ctrl-select { color: #000432 !important; -webkit-text-fill-color: #000432 !important; background-color: #E2E8F0 !important; border-color: #E2E8F0 !important; }
+#levelFilterSelect option, #sessionLengthSelect option { color: var(--bg-base) !important; background: #E2E8F0 !important; }
+#r0OnlyBtn { background: #E2E8F0 !important; color: var(--bg-base) !important; border-color: var(--bg-base) !important; }
+#r0OnlyBtn[style*="255, 215, 0"] { background: #FFD700 !important; }
+#r0OnlyBtn[style*="46, 213, 115"] { background: var(--real-green, var(--accent-green)) !important; }
+.row-red td, .row-green td { border-right: 1px solid #000432 !important; box-shadow: inset -1px 0 0 #000432; }
+.row-red td:last-child, .row-green td:last-child { border-right: none !important; box-shadow: none; }
+#wall-finder-pane div[style*="letter-spacing:0.4em"] { border-top-color: #000432 !important; border-bottom-color: #000432 !important; }
+#streakPanel { border-left-color: #E2E8F0 !important; border-right-color: #000432 !important; }
+#row-index-panel { border-left-color: #000432 !important; }
+
+/* ===== PILL SHAPE EVERYWHERE ===== */
+button, select, input:not([type="color"]):not([type="checkbox"]):not([type="radio"]), .ctrl-input, .pairIconBtn, [style*="border-radius"], #accountBalance, #scanTimerDisplay, #r0OnlyBtn { border-radius: 999px !important; }
+::-webkit-scrollbar-thumb { border-radius: 999px !important; }
+[style*="translate(-50%,-50%)"], [style*="translate(-50%, -50%)"], #app3-modal, #history-modal, #evtLogModal { border-radius: 26px !important; }
+[style*="translate(-50%,-50%)"] span, [style*="translate(-50%, -50%)"] span, #app3-modal span, #tcWrap > div[style*="pointer-events"] span { border-radius: 999px !important; }
+#tcWrap > div[style*="pointer-events"] { border-radius: 14px !important; }
+#bootLogBox, #evtLogBody { border-radius: 18px !important; }
+.app3-list-row, .idx-cell { border: 1px solid var(--bg-base) !important; border-radius: 999px !important; overflow: hidden; }
+#wall-finder-pane div[style*="letter-spacing:0.4em"] { border-radius: 999px !important; border: none !important; margin: 3px 6px; }
+#peaksTableBodyRev td[colspan], #peaksTableBodyMom td[colspan] { border-radius: 999px !important; border: none !important; }
+table { border-collapse: separate !important; border-spacing: 0 3px !important; }
+.row-red:not([style*="background"]), .row-green:not([style*="background"]) { background: transparent !important; }
+.row-red:not([style*="background"]) > td:not([style*="background"]) { background-color: var(--accent-red); }
+.row-green:not([style*="background"]) > td:not([style*="background"]) { background-color: var(--accent-green); }
+.row-red > td, .row-green > td { border-bottom: none !important; }
+.row-red > td:first-child, .row-green > td:first-child { border-radius: 999px 0 0 999px !important; }
+.row-red > td:last-child, .row-green > td:last-child { border-radius: 0 999px 999px 0 !important; }
+.highlight-gem[style*="brightness"] > td:first-child { box-shadow: inset 4px 0 0 #FFD700, inset -1px 0 0 #000432 !important; }
+html body #wall-finder-pane div:has(> .table-wrapper > table > #peaksTableBodyMom) { display: none !important; }
+html body #wall-finder-pane .row-green:not([style*="background"]) > td:not([style*="background"]) { background-color: var(--real-green, #2ED573); }
+html body #wall-finder-pane .row-red:not([style*="background"]) > td:not([style*="background"]) { background-color: var(--real-red, #E63946); }
+html body #wall-finder-pane .ctrl-row .ctrl-select { -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M0 0h8L4 5z' fill='%23000432'/%3E%3C/svg%3E") !important; background-repeat: no-repeat !important; background-position: right 7px center !important; padding-right: 18px !important; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ===== URGENCY SHAPE TIERS ===== */
+#buyBtn, #sellBtn { border-radius: 6px !important; }
+div:has(> #tradeAmount), div:has(> #tradeExpiryVisible), div:has(> #scanMin), div:has(> #scanMax), #accountBalance { border-radius: 6px !important; }
+#scanTimerDisplay { border-radius: 50% / 50% !important; padding: 3px 10px !important; }
+#history-modal, #evtLogModal, #app3-modal { border-radius: 6px !important; }
+#history-modal button, #evtLogModal button { border-radius: 6px !important; }
+#evtLogModal #evtCopyBtn { border-radius: 999px !important; }
+#evtLogBody { border-radius: 6px !important; }
+#app3-modal button, #app3-modal input, #app3-modal select { border-radius: 6px !important; }
+#app3-modal > div:first-child { border-radius: 6px 6px 0 0 !important; }
+#app3-modal .app3-modal-stat-row { border-radius: 999px !important; }
+#app3-modal div:has(> #app3-rD), #app3-modal div:has(> #app3-gD) { padding: 10px 10px 6px !important; border: none !important; }
+#app3-modal div:has(> #app3-rD) > div:first-child, #app3-modal div:has(> #app3-gD) > div:first-child { margin: 0 0 8px !important; padding: 8px 12px !important; border: none !important; border-radius: 999px !important; text-align: center !important; }
+#app3-rD > *, #app3-gD > * { border-radius: 999px !important; border: none !important; margin: 0 0 5px !important; padding: 6px 12px !important; min-height: 28px !important; align-items: center !important; overflow: hidden; }
+
+/* ===== MERGED VERTICAL PILLS: STREAK + ROW INDEX ===== */
+#app3-mainContainer { border-radius: 0 !important; }
+#app3-mainContainer .app3-list-row, #row-index-panel .idx-cell { border: none !important; border-bottom: 1px solid var(--bg-base) !important; border-radius: 0 !important; }
+#app3-mainContainer .app3-list-row:last-child, #row-index-panel .idx-cell:last-child { border-bottom: none !important; }
+#app3-mainContainer .app3-red-side { border-right: 1px solid var(--bg-base) !important; }
+#app3-mainContainer .app3-green-side { border-right: none !important; }
+html body #floatTradePill { border: none !important; outline: none !important; box-shadow: none !important; padding: 0 !important; gap: 1px !important; background: #000432 !important; border-radius: 26px !important; overflow: hidden !important; }
+html body #floatTradePill[style*="0px 0px 16px 16px"] { border-radius: 0 0 26px 26px !important; }
+html body #floatTradePill > * { border: none !important; border-radius: 0 !important; margin: 0 !important; box-shadow: none !important; outline: none !important; }
+html body #floatTradePill > * > input { border-radius: 0 !important; }
+
+/* ===== BOOT SEQUENCE: only the pair tile + the boot log (one big pill) ===== */
+html body #bootOverlay #bootPairGrid { display: flex !important; flex-wrap: wrap !important; gap: 1px !important; background: #000432 !important; border-radius: 26px 26px 0 0 !important; overflow: hidden !important; margin-bottom: 0 !important; }
+html body #bootOverlay #bootPairGrid > div[data-pc] { flex: 1 1 15% !important; min-width: 0 !important; margin: 0 !important; padding: 7px 4px !important; border: none !important; border-radius: 0 !important; box-shadow: none !important; background: var(--pbg) !important; color: #000432 !important; -webkit-text-fill-color: #000432 !important; border-color: transparent !important; }
+html body #bootOverlay #bootPairGrid > div[data-pc]:not([data-st="done"]) { opacity: 0.5 !important; }
+html body #bootOverlay #bootPairGrid > div[data-pc][data-st="done"] { opacity: 1 !important; }
+html body #bootOverlay #bootLogBox { margin: 0 !important; border: none !important; border-top: 1px solid #000432 !important; border-radius: 0 0 26px 26px !important; width: 100% !important; box-sizing: border-box !important; padding: 10px 18px !important; scrollbar-width: none !important; -ms-overflow-style: none !important; }
+html body #bootOverlay #bootLogBox::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: none !important; }
+
+/* ===== PAIR COLOUR LOGIC ===== */
+html.pc-on body:not(#pcx) :is(div:has(> #scanMin),div:has(> #scanMax),div:has(> #tradeAmount),div:has(> #tradeExpiryVisible)) { background: var(--pair-color) !important; border-color: var(--pair-color) !important; }
+html.pc-on body:not(#pcx) :is(div:has(> #scanMin),div:has(> #scanMax),div:has(> #tradeAmount),div:has(> #tradeExpiryVisible)) * { color: #000432 !important; -webkit-text-fill-color: #000432 !important; }
+html.pc-on body:not(#pcx) :is(div:has(> #scanMin),div:has(> #scanMax),div:has(> #tradeAmount),div:has(> #tradeExpiryVisible)) input { background: transparent !important; }
+html.pc-on body:not(#pcx) button[onclick*="openTradeHistory"] { background: var(--pair-color) !important; border-color: var(--pair-color) !important; color: #000432 !important; -webkit-text-fill-color: #000432 !important; }
+html.pc-on body:not(#pcx) button[onclick*="openTradeHistory"] * { color: #000432 !important; -webkit-text-fill-color: #000432 !important; }
+html.pc-on body:not(#pcx) #r0OnlyBtn:not([style*="255, 215, 0"]):not([style*="46, 213, 115"]) { background: var(--pair-color) !important; border-color: var(--pair-color) !important; color: #000432 !important; }
+html.pc-on body:not(#pcx) :is(#levelFilterSelect,#sessionLengthSelect,#minPctInput) { background: var(--pair-color) !important; background-color: var(--pair-color) !important; border-color: var(--pair-color) !important; color: #000432 !important; -webkit-text-fill-color: #000432 !important; }
+html.pc-on body:not(#pcx) #scanTimerDisplay { background: var(--pair-color) !important; color: #000432 !important; }
+html.pc-on body:not(#pcx) #wall-finder-pane div[style*="letter-spacing:0.4em"] { background: var(--pair-color) !important; color: #000432 !important; }
+html.pc-on body:not(#pcx) #app3-modal > div:first-child { background: var(--pair-color) !important; }
+html.pc-on body:not(#pcx) #app3-modal { background: var(--pair-color) !important; border-color: var(--bg-base) !important; }
+html.pc-on body:not(#pcx) #app3-modal ::-webkit-scrollbar-track { background: var(--pair-color) !important; }
+
+/* ===== 2X EXPAND: expiry, buy/sell, cycle min/max ===== */
+#buyBtn, #sellBtn { height: 60px !important; font-size: 16px !important; }
+div:has(> #tradeAmount), div:has(> #tradeExpiryVisible), div:has(> #scanMin), div:has(> #scanMax) { height: 56px !important; box-sizing: border-box !important; }
+#tradeAmount, #tradeExpiryVisible { font-size: 18px !important; }
+#trade-console { padding: 6px !important; gap: 4px !important; align-items: stretch !important; box-sizing: border-box !important; }
+#trade-console > * { min-width: 0 !important; min-height: 0 !important; box-sizing: border-box !important; }
+#tradeAmount, #tradeExpiryVisible, #scanMin, #scanMax { height: 34px !important; line-height: 34px !important; padding: 0 !important; margin: 0 !important; text-align: center !important; width: 100% !important; box-sizing: border-box !important; border-radius: 4px !important; }
+#trade-console > button { height: 34px !important; padding: 0 !important; margin: 0 !important; font-size: 11px !important; letter-spacing: 1px !important; display: flex !important; align-items: center !important; justify-content: center !important; width: 100% !important; border-radius: 4px !important; box-sizing: border-box !important; }
+#scanMin, #scanMax { font-size: 18px !important; }
+html.pc-on body:not(#pcx) :is(#tcToggleBtn,#pairHubBtn,#logBtn,#tradeHistBtn) { background: var(--pair-color) !important; background-color: var(--pair-color) !important; border-color: var(--pair-color) !important; color: #000432 !important; -webkit-text-fill-color: #000432 !important; }
+html.pc-on body:not(#pcx) :is(#tcToggleBtn,#pairHubBtn,#logBtn,#tradeHistBtn) * { color: #000432 !important; -webkit-text-fill-color: #000432 !important; }
+html.pc-on body:not(#pcx) #tcWrap button:not(.tcOn) { background: var(--pair-color) !important; background-color: var(--pair-color) !important; border-color: var(--pair-color) !important; color: #000432 !important; -webkit-text-fill-color: #000432 !important; }
+html.pc-on body:not(#pcx) #tcWrap button:not(.tcOn) * { color: #000432 !important; -webkit-text-fill-color: #000432 !important; fill: #000432 !important; stroke: #000432 !important; }
+html.pc-on body:not(#pcx) #row-index-panel .idx-cell { background: var(--pair-color) !important; background-color: var(--pair-color) !important; border-color: var(--bg-base) !important; }
+html.pc-on body:not(#pcx) #row-index-panel .idx-cell:not([style*="00B0FF"]):not([style*="0, 176, 255"]) { color: #000432 !important; -webkit-text-fill-color: #000432 !important; }
+.idx-cell { border-radius: 999px !important; }
+
+/* ===== SIZE SYSTEM (sizes only) ===== */
+html body div#trade-console { padding: 8px 8px 10px !important; gap: 3px !important; }
+html body div#trade-console > div { gap: 3px !important; }
+html body div#trade-console div:has(> #tradeAmount), html body div#trade-console div:has(> #tradeExpiryVisible), html body div#trade-console div:has(> #scanMin), html body div#trade-console div:has(> #scanMax), html body div#trade-console #buyBtn, html body div#trade-console #sellBtn, html body div#trade-console #tcToggleBtn, html body div#trade-console #pairHubBtn, html body div#trade-console #logBtn, html body div#trade-console #tradeHistBtn, html body div#trade-console #accountBalance { height: 32px !important; min-height: 32px !important; max-height: 32px !important; border-radius: 16px !important; }
+html body div#trade-console #tradeAmount, html body div#trade-console #tradeExpiryVisible, html body div#trade-console #scanMin, html body div#trade-console #scanMax { font-size: 14px !important; }
+html body div#trade-console #accountBalance { font-size: 13px !important; line-height: 30px !important; }
+html body div#trade-console #tcToggleBtn, html body div#trade-console #pairHubBtn, html body div#trade-console #logBtn, html body div#trade-console #tradeHistBtn { border-radius: 999px !important; flex: 1 1 0 !important; width: auto !important; min-width: 44px !important; height: 32px !important; padding: 0 8px !important; overflow: hidden !important; }
+html body div#trade-console #accountBalance { flex: 0 0 32% !important; width: 32% !important; max-width: 32% !important; border-radius: 999px !important; }
+html body div#trade-console #pairHubBtn svg, html body div#trade-console #tradeHistBtn svg { width: 16px !important; height: 16px !important; }
+html body div#trade-console .pairIconBtn::before { width: 16px !important; height: 16px !important; flex: 0 0 16px !important; }
+html body div#wall-finder-pane .ctrl-row { padding: 8px 8px !important; gap: 3px !important; }
+html body div#wall-finder-pane .ctrl-row .ctrl-input, html body div#wall-finder-pane #r0OnlyBtn, html body div#wall-finder-pane #scanTimerDisplay { height: 28px !important; min-height: 28px !important; max-height: 28px !important; line-height: 28px !important; border-radius: 14px !important; }
+html body div#wall-finder-pane .ctrl-row .ctrl-input { font-size: 12px !important; }
+html body div#wall-finder-pane #r0OnlyBtn { font-size: 10px !important; min-width: 38px !important; line-height: 1 !important; }
+html body div#wall-finder-pane #scanTimerDisplay { font-size: 12px !important; min-width: 48px !important; }
+html body #wall-finder-pane div[style*="letter-spacing:0.4em"] { font-size: 10px !important; padding: 6px 8px !important; margin: 4px 8px !important; border-radius: 999px !important; overflow: hidden !important; }
+html body #wall-finder-pane table { width: calc(100% - 16px) !important; margin: 0 8px !important; }
+html body #wall-finder-pane .row-red > td, html body #wall-finder-pane .row-green > td { padding: 7px 3px !important; font-size: 11px !important; }
+html body #wall-finder-pane .row-red > td:first-child, html body #wall-finder-pane .row-green > td:first-child { padding-left: 14px !important; }
+html body #wall-finder-pane .row-red > td:last-child, html body #wall-finder-pane .row-green > td:last-child { padding-left: 2px !important; padding-right: 12px !important; }
+
+/* ===== FULL CAPSULE: whole app under one curved shell ===== */
+html body #main-container { margin: 3px !important; height: calc(100% - 6px) !important; border: 1px solid var(--border) !important; border-radius: 20px !important; overflow: hidden !important; background: var(--bg-base) !important; box-sizing: border-box !important; }
+html body #streakPanel, html body #row-index-panel { margin: 0 !important; border-radius: 0 !important; border-top: none !important; border-right: none !important; border-bottom: 1px solid var(--border) !important; height: calc(100% - var(--tc-padb, 0px)) !important; box-sizing: border-box !important; overflow: hidden !important; }
+html body #streakPanel { border-left: 1px solid var(--border) !important; background: var(--bg-panel) !important; }
+html body #row-index-panel { border-left: 1px solid var(--bg-base) !important; background: #E2E8F0 !important; }
+
+/* ===== CORNER FLUSH: wall pills run edge to edge so the capsule curve is their corner ===== */
+html body #wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane .ctrl-row { padding: 0 !important; }
+html body #wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane .ctrl-row * { border-radius: 0 !important; }
+html body #wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane div[style*="letter-spacing:0.4em"] { margin: 1px 0 0 0 !important; border-radius: 0 !important; }
+html body #wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane table { width: 100% !important; margin: 0 !important; }
+html body div#trade-console#trade-console#trade-console#trade-console#trade-console { padding: 0 !important; }
+html body div#trade-console#trade-console#trade-console#trade-console#trade-console * { border-radius: 0 !important; }
+
+/* ===== BLEND GAPS: inner dividers use #000432 so segment gaps melt into the bg ===== */
+html body #wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane { border-left-color: #000432 !important; }
+html body #wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane .ctrl-row { border-bottom-color: #000432 !important; }
+html body #wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane .ctrl-row * { border-color: #000432 !important; }
+html body #wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane div[style*="letter-spacing:0.4em"] { border-color: #000432 !important; }
+html body #wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane .row-red > td, html body #wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane .row-green > td { border-color: #000432 !important; }
+html body div#trade-console#trade-console#trade-console#trade-console#trade-console { border-top-color: #000432 !important; }
+html body div#trade-console#trade-console#trade-console#trade-console#trade-console * { border-color: #000432 !important; }
+html body #tcWrap #tcBar > button { border-color: #000432 !important; }
+html body #main-container { border-color: #000432 !important; }
+html body #streakPanel, html body #row-index-panel { border-color: #000432 !important; }
+
+html body #canvas-viewport { background: var(--chart-bg) !important; }
+html body #tcWrap { background: var(--chart-bg) !important; }
+html body #canvas-viewport::after { content: '' !important; position: absolute !important; left: 0 !important; top: 0 !important; right: 0 !important; bottom: var(--tc-padb, 0px) !important; border: 1.5px solid var(--pair-color, #E2E8F0) !important; border-top: none !important; border-radius: 0 0 16px 16px !important; box-sizing: border-box !important; pointer-events: none !important; z-index: 9 !important; }
+html body #canvas-viewport:has(#tcWrap[data-bx="0"]:not([style*="display: none"]):not([style*="display:none"]))::after { display: none !important; }
+html body #wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane { padding-bottom: var(--tc-padb, 0px) !important; box-sizing: border-box !important; border-left-width: 0 !important; }
+html body #wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane::after { content: '' !important; display: block !important; position: absolute !important; left: 0 !important; right: 0 !important; bottom: var(--tc-padb, 0px) !important; height: 1px !important; background: var(--pair-color, #E2E8F0) !important; z-index: 60 !important; pointer-events: none !important; }
+html body #wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane::before { content: '' !important; display: block !important; position: absolute !important; left: 0 !important; top: 0 !important; bottom: var(--tc-padb, 0px) !important; width: 1px !important; background: var(--pair-color, #E2E8F0) !important; z-index: 60 !important; pointer-events: none !important; }
+html:has(#tcToggleBtn[data-mode="TICK"]) body #wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane { padding-bottom: 0 !important; }
+html:has(#tcToggleBtn[data-mode="TICK"]) body #wall-finder-pane#wall-finder-pane#wall-finder-pane::after, html:has(#tcToggleBtn[data-mode="TICK"]) body #wall-finder-pane#wall-finder-pane#wall-finder-pane::before { content: none !important; display: none !important; }
+html:has(#tcToggleBtn[data-mode="TICK"]) body #wall-finder-pane#wall-finder-pane#wall-finder-pane { border-left-width: 1px !important; border-left-color: var(--pair-color, #E2E8F0) !important; }
+html body #wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane { border-left-width: 0 !important; }
+html body #wall-finder-pane::before { content: '' !important; position: absolute !important; left: 0 !important; top: 0 !important; bottom: var(--tc-padb, 0px) !important; width: 1px !important; background: var(--pair-color, #E2E8F0) !important; z-index: 60 !important; pointer-events: none !important; }
+html:has(#tcToggleBtn[data-mode="TICK"]) body #wall-finder-pane::after { display: none !important; }
+html body #main-container#main-container#main-container { border-color: var(--pair-color, #E2E8F0) !important; }
+html body #streakPanel#streakPanel#streakPanel, html body #row-index-panel#row-index-panel#row-index-panel { border-color: var(--pair-color, #E2E8F0) !important; }
+html body #wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane { border-left-color: var(--pair-color, #E2E8F0) !important; }
+html body #streakPanel#streakPanel#streakPanel { border-radius: 16px 0 0 16px !important; overflow: hidden !important; }
+html body div#trade-console#trade-console#trade-console#trade-console#trade-console#trade-console > div > div:has(> #scanMax) { border-radius: 0 0 18px 0 !important; }
+html body #wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane { padding-bottom: var(--tc-padb, 0px) !important; box-sizing: border-box !important; }
+html body #wall-finder-pane::after { content: '' !important; position: absolute !important; left: 0 !important; right: 0 !important; bottom: var(--tc-padb, 0px) !important; height: 1px !important; background: var(--pair-color, #E2E8F0) !important; z-index: 60 !important; pointer-events: none !important; }
+html body #streakPanel, html body #row-index-panel { border-bottom-color: var(--pair-color, #E2E8F0) !important; }
+html body #tcWrap[data-bx="1"] #tcBar { left: 0 !important; right: auto !important; bottom: 0 !important; transform: none !important; border-radius: 0 20px 0 19px !important; }
+html body #streakPanel#streakPanel#streakPanel#streakPanel#streakPanel, html body #row-index-panel#row-index-panel#row-index-panel#row-index-panel#row-index-panel { border-left-color: #000432 !important; }
+html body #wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane { border-left-color: #000432 !important; }
+html body #wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane#wall-finder-pane::before { background: #000432 !important; }
+html body #tcWrap#tcWrap #tcBar#tcBar { border-top: 1px solid #000432 !important; }
+html body #floatTradePill#floatTradePill#floatTradePill#floatTradePill#floatTradePill#floatTradePill { border-top: 1px solid #000432 !important; }
+
+/* ===== trade console: icon buttons + compact sizing ===== */
+#tcWrap button { background: #E2E8F0 !important; color: var(--bg-base) !important; border-color: #E2E8F0 !important; }
+#tcWrap button.tcOn { background: #FFD700 !important; border-color: #FFD700 !important; }
+#tcToggleBtn, #pairHubBtn, #logBtn, #tradeHistBtn { background: #E2E8F0 !important; color: var(--bg-base) !important; border-color: #E2E8F0 !important; }
+div:has(> #tradeAmount), div:has(> #tradeExpiryVisible), div:has(> #scanMin), div:has(> #scanMax) { background: #E2E8F0 !important; border-color: #E2E8F0 !important; }
+#tradeAmount, #tradeExpiryVisible, #scanMin, #scanMax { color: var(--bg-base) !important; }
+#scanTimerDisplay { background: #E2E8F0; color: var(--bg-base) !important; padding: 2px 6px; border-radius: 2px; }
+.ctrl-row .ctrl-input { background: #E2E8F0 !important; color: var(--bg-base) !important; border-color: #E2E8F0 !important; }
+.ctrl-row > span:has(.ctrl-input) { color: var(--bg-base) !important; }
+.pairIconBtn { font-size: 0 !important; min-width: 32px; height: 28px; padding: 0 6px !important; display: inline-flex; align-items: center; justify-content: center; gap: 2px; box-sizing: border-box; }
+.pairIconBtn::before { content: ''; width: 16px; height: 16px; flex: 0 0 16px; background: currentColor; -webkit-mask: var(--ico) center/contain no-repeat; mask: var(--ico) center/contain no-repeat; }
+#tcToggleBtn { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 3v18h18'/%3E%3Cpath d='M7 15l4-5 3 3 5-7'/%3E%3C/svg%3E"); }
+#tcToggleBtn[data-mode='GRID'] { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='3' width='18' height='18' rx='1'/%3E%3Cpath d='M3 9h18M3 15h18M9 3v18M15 3v18'/%3E%3C/svg%3E"); }
+#logBtn { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 2h9l5 5v15H6z'/%3E%3Cpath d='M14 2v6h6'/%3E%3Cpath d='M9 13h8M9 17h8'/%3E%3C/svg%3E"); }
+#logBtn::after { content: attr(data-n); font-size: 9px; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
+html body #buyBtn, html body #sellBtn { border-radius: 6px !important; }
+html body div:has(> #tradeAmount), html body div:has(> #tradeExpiryVisible), html body div:has(> #scanMin), html body div:has(> #scanMax), html body #accountBalance { border-radius: 6px !important; }
+html body #trade-console { margin-top: auto !important; padding: 4px 6px !important; gap: 3px !important; grid-auto-rows: min-content !important; align-content: end !important; box-sizing: border-box !important; }
+html body #trade-console > div { gap: 3px !important; width: 100% !important; min-width: 0 !important; box-sizing: border-box !important; }
+html body #trade-console div:has(> #tradeAmount), html body #trade-console div:has(> #tradeExpiryVisible), html body #trade-console div:has(> #scanMin), html body #trade-console div:has(> #scanMax) { height: 24px !important; min-height: 0 !important; max-height: 24px !important; padding: 0 !important; margin: 0 !important; flex: 1 1 0 !important; min-width: 0 !important; box-sizing: border-box !important; }
+html body #trade-console #tradeAmount, html body #trade-console #tradeExpiryVisible, html body #trade-console #scanMin, html body #trade-console #scanMax { height: 100% !important; min-height: 0 !important; line-height: 1 !important; font-size: 12px !important; padding: 0 !important; margin: 0 !important; text-align: center !important; }
+html body #trade-console #buyBtn, html body #trade-console #sellBtn { height: 24px !important; min-height: 0 !important; max-height: 24px !important; padding: 0 !important; margin: 0 !important; font-size: 10px !important; letter-spacing: 0.5px !important; flex: 1 1 0 !important; min-width: 0 !important; display: flex !important; align-items: center !important; justify-content: center !important; box-sizing: border-box !important; }
+html body #trade-console .pairIconBtn, html body #trade-console #tradeHistBtn { height: 24px !important; min-height: 0 !important; max-height: 24px !important; min-width: 28px !important; padding: 0 4px !important; box-sizing: border-box !important; }
+html body #trade-console #accountBalance { height: 24px !important; min-height: 0 !important; max-height: 24px !important; line-height: 22px !important; font-size: 12px !important; padding: 0 4px !important; box-sizing: border-box !important; }
+html body #trade-console #buyBtn, html body #trade-console #sellBtn { font-size: 0 !important; color: transparent !important; -webkit-text-fill-color: transparent !important; text-shadow: none !important; letter-spacing: 0 !important; }
+html body #scanTimerDisplay { border-radius: 12px !important; height: 24px !important; line-height: 24px !important; padding: 0 10px !important; box-sizing: border-box !important; display: inline-block !important; min-width: 44px !important; text-align: center !important; }
+html body #wall-finder-pane .ctrl-row { align-items: center !important; gap: 4px !important; }
+html body #wall-finder-pane .ctrl-row .ctrl-input { height: 24px !important; min-height: 0 !important; line-height: 24px !important; border-radius: 12px !important; padding-top: 0 !important; padding-bottom: 0 !important; box-sizing: border-box !important; }
+html body #wall-finder-pane #minPctInput { width: 100% !important; }
+html body #wall-finder-pane #r0OnlyBtn { height: 24px !important; min-height: 0 !important; max-height: 24px !important; min-width: 34px !important; padding: 0 8px !important; border-radius: 12px !important; line-height: 1 !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; box-sizing: border-box !important; }
+html body #wall-finder-pane #scanTimerDisplay { height: 24px !important; line-height: 24px !important; border-radius: 12px !important; padding: 0 10px !important; min-width: 44px !important; text-align: center !important; box-sizing: border-box !important; }
+html body #trade-console #tcToggleBtn, html body #trade-console #pairHubBtn, html body #trade-console #logBtn, html body #trade-console #tradeHistBtn { height: 24px !important; min-height: 0 !important; max-height: 24px !important; min-width: 0 !important; width: 0 !important; flex: 1 1 0 !important; padding: 0 2px !important; margin: 0 !important; border-radius: 12px !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; box-sizing: border-box !important; overflow: hidden !important; }
+html body #trade-console #pairHubBtn svg, html body #trade-console #tradeHistBtn svg { width: 14px !important; height: 14px !important; }
+html body #trade-console .pairIconBtn::before { width: 14px !important; height: 14px !important; flex: 0 0 14px !important; }
+html body #trade-console #accountBalance { flex: 0 0 calc((100% - 3px) / 2) !important; width: calc((100% - 3px) / 2) !important; max-width: calc((100% - 3px) / 2) !important; min-width: 0 !important; border-radius: 12px !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; background: var(--pair-color, #E2E8F0) !important; background-color: var(--pair-color, #E2E8F0) !important; border-color: var(--pair-color, #E2E8F0) !important; color: #000432 !important; -webkit-text-fill-color: #000432 !important; }
+html body #trade-console div:has(> #tradeAmount), html body #trade-console div:has(> #tradeExpiryVisible), html body #trade-console div:has(> #scanMin), html body #trade-console div:has(> #scanMax), html body #trade-console #buyBtn, html body #trade-console #sellBtn { border-radius: 12px !important; height: 24px !important; }
+html body #trade-console > div { align-items: center !important; flex-wrap: nowrap !important; }
+
+/* ===== floating BUY/SELL pill (docked into the tick chart) ===== */
+#floatTradePill { position: fixed; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); z-index: 1500; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; width: 180px; box-sizing: border-box; }
+html body #floatTradePill > * { min-width: 0 !important; width: 100% !important; max-width: 100% !important; height: 28px !important; min-height: 0 !important; max-height: 28px !important; margin: 0 !important; box-sizing: border-box !important; border-radius: 14px !important; flex: none !important; }
+html body #floatTradePill > #sellBtn, html body #floatTradePill > #buyBtn { display: flex !important; align-items: center; justify-content: center; padding: 0 !important; white-space: nowrap; overflow: hidden; }
+html body #floatTradePill > div { padding: 0 !important; }
+html body #floatTradePill input { font-size: 12px !important; height: 100% !important; min-height: 0 !important; line-height: 1 !important; padding: 0 !important; margin: 0 !important; text-align: center !important; }
+html body #floatTradePill > #accountBalance { grid-column: 1 / -1 !important; display: flex !important; align-items: center; justify-content: center; background: var(--pair-color,#E2E8F0) !important; background-color: var(--pair-color,#E2E8F0) !important; border: 1px solid var(--pair-color,#E2E8F0) !important; color: #000432 !important; -webkit-text-fill-color: #000432 !important; font-size: 12px !important; line-height: 1 !important; padding: 0 6px !important; }
+html body #floatTradePill { display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; align-items: center !important; gap: 3px !important; grid-template-columns: none !important; width: 300px; }
+html body #floatTradePill > * { flex: 1 1 0 !important; width: auto !important; min-width: 0 !important; max-width: none !important; height: 26px !important; min-height: 0 !important; max-height: 26px !important; border-radius: 13px !important; }
+html body #floatTradePill > #accountBalance { flex: 1.4 1 0 !important; grid-column: auto !important; font-size: 11px !important; padding: 0 4px !important; }
+html body #floatTradePill input { font-size: 11px !important; }
+html body #floatTradePill > :first-child { border-radius: 13px 0 0 13px !important; }
+html body #floatTradePill > :last-child { border-radius: 0 13px 13px 0 !important; }
+html body #floatTradePill > :not(:first-child):not(:last-child) { border-radius: 0 !important; }
+
+/* ===== segmented corners for the console rows ===== */
+html body div#trade-console #pairHubBtn { border-radius: 12px 0 0 12px !important; }
+html body div#trade-console #tcToggleBtn, html body div#trade-console #logBtn { border-radius: 0 !important; }
+html body div#trade-console #tradeHistBtn { border-radius: 0 12px 12px 0 !important; }
+html body div#trade-console > div > div:has(> #scanMin) { border-radius: 12px 0 0 12px !important; }
+html body div#trade-console > div > div:has(> #scanMax) { border-radius: 0 12px 12px 0 !important; }
+html body div#wall-finder-pane .ctrl-row > span:first-child > .ctrl-input { border-radius: 12px 0 0 12px !important; }
+html body div#wall-finder-pane .ctrl-row > span:not(:first-child) .ctrl-input, html body div#wall-finder-pane .ctrl-row #r0OnlyBtn { border-radius: 0 !important; }
+html body div#wall-finder-pane .ctrl-row #scanTimerDisplay { border-radius: 0 12px 12px 0 !important; }
+html body div#trade-console#trade-console { gap: 1.5px !important; }
+html body div#trade-console#trade-console > div { gap: 1.5px !important; }
+html body div#trade-console#trade-console #pairHubBtn { border-radius: 16px 0 0 16px !important; }
+html body div#trade-console#trade-console #tcToggleBtn, html body div#trade-console#trade-console #logBtn { border-radius: 0 !important; }
+html body div#trade-console#trade-console #tradeHistBtn { border-radius: 0 16px 16px 0 !important; }
+html body div#trade-console#trade-console > div > div:has(> #scanMin) { border-radius: 16px 0 0 16px !important; }
+html body div#trade-console#trade-console > div > div:has(> #scanMax) { border-radius: 0 16px 16px 0 !important; }
+html body div#wall-finder-pane#wall-finder-pane .ctrl-row { gap: 1.5px !important; }
+html body div#wall-finder-pane#wall-finder-pane .ctrl-row > * { margin: 0 !important; }
+html body div#wall-finder-pane#wall-finder-pane .ctrl-row > span:first-child > .ctrl-input { border-radius: 14px 0 0 14px !important; }
+html body div#wall-finder-pane#wall-finder-pane .ctrl-row > span:not(:first-child) .ctrl-input, html body div#wall-finder-pane#wall-finder-pane .ctrl-row #r0OnlyBtn { border-radius: 0 !important; }
+html body div#wall-finder-pane#wall-finder-pane .ctrl-row #scanTimerDisplay { border-radius: 0 14px 14px 0 !important; }
+
+/* floating pill: one joined capsule */
+html body #floatTradePill#floatTradePill, html body #floatTradePill#floatTradePill > *, html body #floatTradePill#floatTradePill > #accountBalance, html body #floatTradePill#floatTradePill > #buyBtn, html body #floatTradePill#floatTradePill > #sellBtn { border: 0 !important; border-color: transparent !important; outline: 0 !important; box-shadow: none !important; }
+html body #floatTradePill#floatTradePill > * > * { outline: 0 !important; box-shadow: none !important; }
+html body #floatTradePill#floatTradePill#floatTradePill { gap: 0 !important; border-radius: 999px !important; overflow: hidden !important; }
+html body #floatTradePill#floatTradePill#floatTradePill > * { height: 40px !important; min-height: 40px !important; max-height: 40px !important; border-radius: 0 !important; }
+html body #floatTradePill#floatTradePill#floatTradePill > :first-child { border-radius: 999px 0 0 999px !important; }
+html body #floatTradePill#floatTradePill#floatTradePill > :last-child { border-radius: 0 999px 999px 0 !important; }
+html body #floatTradePill#floatTradePill#floatTradePill > *:not(:first-child) { border-left: 1.5px solid var(--bg-base) !important; }
+html body #floatTradePill#floatTradePill#floatTradePill, html body #floatTradePill#floatTradePill#floatTradePill > *, html body #floatTradePill#floatTradePill#floatTradePill > * > *, html body #floatTradePill#floatTradePill#floatTradePill input, html body #floatTradePill#floatTradePill#floatTradePill > #buyBtn, html body #floatTradePill#floatTradePill#floatTradePill > #sellBtn, html body #floatTradePill#floatTradePill#floatTradePill > #accountBalance { font-family: 'JetBrains Mono', monospace !important; font-size: 15px !important; font-weight: 800 !important; letter-spacing: 0.5px !important; line-height: 1 !important; text-transform: none !important; font-style: normal !important; }
+html body #floatTradePill#floatTradePill#floatTradePill > #buyBtn, html body #floatTradePill#floatTradePill#floatTradePill > #sellBtn, html body #floatTradePill#floatTradePill#floatTradePill > #accountBalance { display: flex !important; align-items: center !important; justify-content: center !important; text-align: center !important; padding: 0 6px !important; white-space: nowrap !important; }
+html body #floatTradePill#floatTradePill#floatTradePill input { text-align: center !important; height: 100% !important; padding: 0 !important; margin: 0 !important; background: transparent !important; border: 0 !important; }
+html[data-sig="G"] body #floatTradePill#floatTradePill#floatTradePill { --sig-color: var(--real-green,#2ED573); }
+html[data-sig="R"] body #floatTradePill#floatTradePill#floatTradePill { --sig-color: var(--real-red,#E63946); }
+html body #floatTradePill#floatTradePill#floatTradePill > div, html body #floatTradePill#floatTradePill#floatTradePill > #accountBalance { background: var(--sig-color,var(--pair-color,#E2E8F0)) !important; background-color: var(--sig-color,var(--pair-color,#E2E8F0)) !important; }
+html body #floatTradePill#floatTradePill#floatTradePill > div, html body #floatTradePill#floatTradePill#floatTradePill > div *, html body #floatTradePill#floatTradePill#floatTradePill > #accountBalance, html body #floatTradePill#floatTradePill#floatTradePill input { color: #000432 !important; -webkit-text-fill-color: #000432 !important; }
+html body #floatTradePill#floatTradePill#floatTradePill > #buyBtn { background: var(--real-green,#2ED573) !important; background-color: var(--real-green,#2ED573) !important; color: #000432 !important; -webkit-text-fill-color: #000432 !important; }
+html body #floatTradePill#floatTradePill#floatTradePill > #sellBtn { background: var(--real-red,#E63946) !important; background-color: var(--real-red,#E63946) !important; color: #000432 !important; -webkit-text-fill-color: #000432 !important; }
+html[data-sig="G"] body #floatTradePill#floatTradePill#floatTradePill > #sellBtn { display: none !important; }
+html[data-sig="R"] body #floatTradePill#floatTradePill#floatTradePill > #buyBtn { display: none !important; }
+html body #floatTradePill#floatTradePill#floatTradePill#floatTradePill[style*="0px 0px 16px 16px"] { border-radius: 0 0 20px 20px !important; margin-top: 0 !important; padding: 0 !important; background: #000432 !important; }
+html body #floatTradePill#floatTradePill#floatTradePill#floatTradePill[style*="0px 0px 16px 16px"] > :first-child { border-radius: 0 0 0 20px !important; }
+html body #floatTradePill#floatTradePill#floatTradePill#floatTradePill[style*="0px 0px 16px 16px"] > :last-child { border-radius: 0 0 20px 0 !important; }
+html body #floatTradePill#floatTradePill#floatTradePill#floatTradePill[style*="0px 0px 16px 16px"] > :not(:first-child):not(:last-child) { border-radius: 0 !important; }
+html body #floatTradePill#floatTradePill#floatTradePill#floatTradePill[style*="0px 0px 16px 16px"] > * { border-top: 0 !important; }
+
+/* wall pane: joined control strip + table */
+html body #wall-finder-pane#wall-finder-pane#wall-finder-pane .ctrl-row { padding: 8px 8px 0 8px !important; gap: 1px !important; border-bottom: none !important; background: #000432 !important; }
+html body #wall-finder-pane#wall-finder-pane#wall-finder-pane .ctrl-row > span:first-child > .ctrl-input { border-radius: 14px 0 0 0 !important; }
+html body #wall-finder-pane#wall-finder-pane#wall-finder-pane .ctrl-row #scanTimerDisplay { border-radius: 0 14px 0 0 !important; }
+html body #wall-finder-pane#wall-finder-pane#wall-finder-pane .ctrl-row > span:not(:first-child) .ctrl-input, html body #wall-finder-pane#wall-finder-pane#wall-finder-pane .ctrl-row #r0OnlyBtn { border-radius: 0 !important; }
+html body #wall-finder-pane#wall-finder-pane#wall-finder-pane div[style*="letter-spacing:0.4em"] { margin: 1px 8px 0 8px !important; border-radius: 0 !important; border: none !important; }
+html body #wall-finder-pane#wall-finder-pane#wall-finder-pane table { border-spacing: 0 1px !important; background: #000432 !important; }
+html body #wall-finder-pane#wall-finder-pane#wall-finder-pane .row-red > td:first-child, html body #wall-finder-pane#wall-finder-pane#wall-finder-pane .row-green > td:first-child, html body #wall-finder-pane#wall-finder-pane#wall-finder-pane .row-red > td:last-child, html body #wall-finder-pane#wall-finder-pane#wall-finder-pane .row-green > td:last-child { border-radius: 0 !important; }
+html body #wall-finder-pane#wall-finder-pane#wall-finder-pane tbody > tr:last-child > td:first-child { border-radius: 0 0 0 14px !important; }
+html body #wall-finder-pane#wall-finder-pane#wall-finder-pane tbody > tr:last-child > td:last-child { border-radius: 0 0 14px 0 !important; }
+html body #wall-finder-pane#wall-finder-pane#wall-finder-pane tbody > tr:last-child > td:only-child { border-radius: 0 0 14px 14px !important; }
+html body #floatTradePill#floatTradePill#floatTradePill#floatTradePill#floatTradePill { border-radius: 20px 20px 0 0 !important; }
+html body #floatTradePill#floatTradePill#floatTradePill#floatTradePill#floatTradePill[data-sg="1"] { border-radius: 0 !important; }
+html body #floatTradePill#floatTradePill#floatTradePill#floatTradePill#floatTradePill > * { border-radius: 0 !important; border-top: 0 !important; }
+html body #tcWrap #tcBar { width: min(360px,calc(100% - 8px)) !important; gap: 1.5px !important; background: #000432 !important; border-radius: 0 0 20px 20px !important; overflow: hidden !important; padding: 0 !important; }
+html body #tcWrap #tcBar > button { flex: 1 1 0 !important; width: auto !important; min-width: 0 !important; height: 26px !important; margin: 0 !important; padding: 0 !important; border: none !important; border-radius: 0 !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; }
+html body div#trade-console#trade-console#trade-console { gap: 1px !important; }
+html body div#trade-console#trade-console#trade-console > div { gap: 1px !important; margin-top: 0 !important; }
+html body div#trade-console#trade-console#trade-console #pairHubBtn { border-radius: 16px 0 0 0 !important; }
+html body div#trade-console#trade-console#trade-console #tcToggleBtn, html body div#trade-console#trade-console#trade-console #logBtn { border-radius: 0 !important; }
+html body div#trade-console#trade-console#trade-console #tradeHistBtn { border-radius: 0 16px 0 0 !important; }
+html body div#trade-console#trade-console#trade-console > div > div:has(> #scanMin) { border-radius: 0 0 0 16px !important; }
+html body div#trade-console#trade-console#trade-console > div > div:has(> #scanMax) { border-radius: 0 0 16px 0 !important; }
+html:has(#tcToggleBtn[data-mode="TICK"]) body #floatTradePill { display: none !important; }
+
+/* ===== PAIR COLOUR: history + log popups, boot log, chart tooltip ===== */
+html.pc-on body:not(#pcx) :is(#history-modal,#evtLogModal) { background: var(--pair-color) !important; background-color: var(--pair-color) !important; box-shadow: none !important; }
+html.pc-on body:not(#pcx) :is(#history-modal,#evtLogModal) > div:first-child { background: var(--pair-color) !important; }
+html.pc-on body:not(#pcx) :is(#history-modal,#evtLogModal) ::-webkit-scrollbar-track { background: var(--pair-color) !important; }
+html.pc-on body:not(#pcx) :is(#history-modal,#evtLogModal) :is([style*="color:#FFD700"],[style*="color: #FFD700"],[style*="color:#00B0FF"],[style*="255,215,0"]) { background: #000432 !important; color: var(--pair-color) !important; -webkit-text-fill-color: var(--pair-color) !important; }
+html.pc-on body:not(#pcx) :is(#history-modal,#evtLogModal) button:not([style*="background:none"]):not([style*="background: none"]):not([style*="background:transparent"]):not([style*="background: transparent"]) { background: #000432 !important; color: var(--pair-color) !important; -webkit-text-fill-color: var(--pair-color) !important; border-color: #000432 !important; }
+html.pc-on body:not(#pcx):not(#pcx2) :is(#history-modal,#evtLogModal) button:not([style*="background:none"]):not([style*="background: none"]):not([style*="background:transparent"]):not([style*="background: transparent"]):is([style*="background:var(--accent-green)"],[style*="background: var(--accent-green)"]) { background: var(--pair-color) !important; color: #000432 !important; -webkit-text-fill-color: #000432 !important; }
+html body #bootOverlay #bootLogBox { background: var(--pair-color, #E2E8F0) !important; }
+html body #floatTradePill#floatTradePill#floatTradePill#floatTradePill#floatTradePill#floatTradePill > #tradeHistBtn { flex: 0 0 56px !important; width: 56px !important; min-width: 56px !important; max-width: 56px !important; display: flex !important; align-items: center !important; justify-content: center !important; padding: 0 !important; }
+html body #tcWrap#tcWrap #tcDock#tcDock { width: min(695px, 98%) !important; min-width: 0 !important; box-sizing: border-box !important; }
+html.pc-on body:not(#pcx) #tcWrap > div[style*="pointer-events"] { background: var(--pair-color) !important; }
+html.pc-on body:not(#pcx) #tcWrap > div[style*="pointer-events"] [style*="color:#FFD700"] { background: #000432 !important; color: var(--pair-color) !important; -webkit-text-fill-color: var(--pair-color) !important; }
+html body #floatTradePill#floatTradePill#floatTradePill#floatTradePill#floatTradePill#floatTradePill > div, html body #floatTradePill#floatTradePill#floatTradePill#floatTradePill#floatTradePill#floatTradePill > #buyBtn, html body #floatTradePill#floatTradePill#floatTradePill#floatTradePill#floatTradePill#floatTradePill > #sellBtn { display: none !important; }
