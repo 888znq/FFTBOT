@@ -231,25 +231,19 @@
         if (TC.sessStart !== start) {
             TC.sessStart = start; TC.sig = null; TC.seen = {}; TC.flash = {}; TC.banner = null; TC.hitSeen = ''; TC.ready = false;
         }
-        var scanAt = (S && S.scan) ? S.scan.at : null, kept = null, ki;
+        var scanAt = (S && S.scan) ? S.scan.at : null, inc = null, ki, sc0, sc1;
         try { lst = _buildTop10(tcSigList()); } catch (e) { lst = []; }
         var cur = TC.sig;
-        if (cur && TC.scanAt === scanAt) {
-            for (ki = 0; ki < lst.length; ki++) { if (tcSigKey(lst[ki]) === tcSigKey(cur)) { kept = lst[ki]; break; } }
-        }
-        if (!(cur && tcHasPending(cur, prices, fin, sEnd))) {
-            for (ki = 0; ki < lst.length; ki++) {
-                if (tcHasPending(lst[ki], prices, fin, sEnd)) { TC.sig = lst[ki]; TC.scanAt = scanAt; return; }
-            }
-        }
-        if (!(cur && tcHasPending(cur, prices, fin, sEnd))) {
-            for (ki = 0; ki < lst.length; ki++) {
-                if (tcHasPending(lst[ki], prices, fin, sEnd)) { TC.sig = lst[ki]; TC.scanAt = scanAt; return; }
-            }
-        }
-        if (kept) { TC.sig = kept; return; }
         if (cur && tcHasPending(cur, prices, fin, sEnd)) return;
-        try { best = lst.length ? tcNearest(lst, (S.now || Math.floor(Date.now() / 1000)) - start, start) : null; } catch (e2) { best = null; }
+        if (cur) {
+            for (ki = 0; ki < lst.length; ki++) { if (tcSigKey(lst[ki]) === tcSigKey(cur)) { inc = lst[ki]; break; } }
+        }
+        best = lst.length ? lst[0] : null;
+        if (inc) {
+            sc0 = inc.pct * inc.c1;
+            sc1 = best.pct * best.c1;
+            if (!(sc1 > sc0)) best = inc;
+        }
         TC.scanAt = scanAt;
         var okey = cur ? tcSigKey(cur) : '', nkey = best ? tcSigKey(best) : '';
         TC.sig = best;
