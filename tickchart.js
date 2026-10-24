@@ -956,7 +956,7 @@
             var sgA = sgSlot.getBoundingClientRect(), sgB = TC.cv.getBoundingClientRect();
             if (sgA.width > 60 && sgA.height > 10) { pillW = Math.round(sgA.width); pillH = Math.round(sgA.height); pillX = Math.round(sgA.left - sgB.left); pillY = Math.round(sgA.top - sgB.top); sgOk = true; }
         }
-        if (sgSlot) sgSlot.style.display = 'none';
+        if (sgSlot) sgSlot.style.setProperty('display', 'block', 'important');
         sgOk = false; pillW = 0; pillH = 0; pillX = plotR - 4;
         var txtMax = sgOk ? Math.max(60, plotW - 12) : Math.max(60, pillX - plotL - 12);
         ctx.save();
@@ -1136,7 +1136,20 @@
                 sbBar.style.bottom = '140px';
             }
         }
-        sbBar.style.display = 'flex';
+        sbBar.style.display = 'none';
+        var tspEl = document.getElementById('tcSigSlot');
+        if (tspEl) {
+            var tspC = sig ? [pname, pTimer, 'C' + sig.c, 'R' + sig.r, 'X' + sig.s1 + '-X' + sig.s2, String(sig.c1), String(sig.c2), sig.pct + '%'] : ['NO SIGNAL'];
+            var tspG = [2, 1.4, 1, 1, 1.4, 1, 1, 1];
+            var tspH = '<div style="display:flex;width:100%;height:100%;gap:1px;background:#000432;">', tspI;
+            for (tspI = 0; tspI < tspC.length; tspI++) {
+                tspH += '<div style="flex:' + (sig ? tspG[tspI] : 1) + ' 1 auto;min-width:0;overflow:hidden;display:flex;align-items:center;justify-content:center;white-space:nowrap;padding:0 ' + (tspI === tspC.length - 1 ? '14px' : '4px') + ' 0 ' + (tspI === 0 ? '14px' : '4px') + ';box-sizing:border-box;background:' + pFill + ';color:#000432;-webkit-text-fill-color:#000432;font:800 12px JetBrains Mono,monospace;line-height:1;">' + tspC[tspI] + '</div>';
+            }
+            tspH += '</div>';
+            if (tspEl._h !== tspH) { tspEl._h = tspH; tspEl.innerHTML = tspH; }
+            tspEl.style.setProperty('display', 'block', 'important');
+            tspEl.style.pointerEvents = 'auto';
+        }
 
         /* ---- stacked rows: the rest of the top ten under the selected signal ---- */
         var stkL = [], stkO = [], stkN, stkK, stkS, stkP, stkT, stkF, stkC, stkW, stkX, stkFs, stkFill;
@@ -1638,9 +1651,11 @@
             if (!ceHas) ceSesOpts.push({ t: ceLen(ceVal.session) + ' (custom)', v: ceVal.session });
             var cePmK = [['symbol', 'PAIR'], ['level', 'LVL'], ['minPct', 'MIN%'], ['minC', 'CYC MIN'], ['maxC', 'CYC MAX'], ['interval', 'SCAN'], ['session', 'SESSION'], ['autoStake', 'STAKE'], ['auto', 'AUTO']];
             function cePmDraw() {
-                var h = '', i6, kk;
-                for (i6 = 0; i6 < cePmK.length; i6++) {
-                    kk = cePmK[i6][0];
+                var h = '', i6, kk, cePmKs = cePmK.slice(), cePmHas = false;
+                for (i6 = 0; i6 < cePmKs.length; i6++) { if (cePmKs[i6][0] === 'level') cePmHas = true; }
+                if (!cePmHas) cePmKs.splice(cePmKs.length > 1 ? 1 : 0, 0, ['level', 'LEVEL']);
+                for (i6 = 0; i6 < cePmKs.length; i6++) {
+                    kk = cePmKs[i6][0];
                     if (kk === 'auto') continue;
                     h += '<div class="pmE" data-k="' + kk + '"><span class="pmV">' + ceFmt(kk) + '</span></div>';
                 }
