@@ -3,7 +3,7 @@
   "minC": 120,
   "maxC": 180,
   "minPct": 100,
-  "interval": 60,
+  "interval": 120,
   "session": 3600,
   "autoStake": 1.0,
   "auto": true,
