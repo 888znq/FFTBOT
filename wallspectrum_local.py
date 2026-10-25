@@ -172,6 +172,10 @@ def scan(prices, base_ts, min_c=MIN_CYCLE, max_c=MAX_CYCLE, pair=PAIR):
 
 
 def top_signals(revs, min_pct=MIN_PCT, level=0, r0_only=False):
+    try:
+        _lvls_update(revs, r0_only)
+    except Exception as e:
+        elog("ERROR", "LVLS update failed: %s" % str(e)[:160])
     ok = [x for x in revs if x["pct"] >= min_pct and (level == 0 or x["s1"] == level)
           and (not r0_only or x["r"] == 0)]
     ok.sort(key=lambda x: -(x["pct"] * x["c1"]))  # stable, like JS sort
@@ -364,6 +368,8 @@ async def scanner():
         prices, st, t0 = list(S["prices"]), S["start"], time.time()
         sig0 = _filter_sig()
         revs = await loop.run_in_executor(None, scan, prices, st, CFG.min_c, CFG.max_c, CFG.symbol)
+        if S["start"] != st:
+            continue
         r0o = bool(getattr(CFG, "r0_only", False))
         top = top_signals(revs, CFG.min_pct, CFG.level, r0o)
         allq = sorted((x for x in revs if x["pct"] >= CFG.min_pct and (CFG.level == 0 or x["s1"] == CFG.level)
@@ -411,7 +417,7 @@ async def api_state(request):
         "evt": [e for e in EVT if e["id"] > since], "evtSeq": EVT_SEQ[0], "evtBoot": EVT_BOOT,
         "symbol": CFG.symbol, "start": S["start"], "len": len(p), "now": now(), "status": S["status"],
         "error": S.get("error"), "ticks": sum(1 for x in p if x != MISSING), "lastTick": S["last_tick"],
-        "maxidx": S["maxidx"], "scan": S["scan"], "prices": p,
+        "maxidx": S["maxidx"], "scan": S["scan"], "lvls": LVLS["out"], "prices": p,
         "cfg": {"level": CFG.level, "minC": CFG.min_c, "maxC": CFG.max_c, "minPct": CFG.min_pct,
                 "interval": CFG.scan_interval, "intervalRaw": getattr(CFG, "interval_raw", CFG.scan_interval),
                 "session": CFG.session, "autoStake": AUTO_STAKE, "auto": bool(AUTO["on"]),
@@ -1131,6 +1137,242 @@ BOT = {"champ": None, "strikes": 0, "chal_key": None, "chal_n": 0, "scan_at": No
        "stats": {}, "loss_run": 0, "day_pnl": 0.0, "day": int(time.time() // 86400), "halt": None, "qt": 0.0}
 
 
+LS = {"W_BASE": 0.68, "W_REC": 0.15, "W_GAP": 0.10, "W_TIME": 0.07,
+      "PRIOR_P": 0.75, "PRIOR_K": 4, "Z": 1.28,
+      "LV_FULL": 2, "LV_DECAY": 0.06, "LV_MIN": 0.70,
+      "TIME_BUCKETS": 6, "MISS_PEN": 12.0,
+      "MARGIN": 4.0, "MARGIN_BADRUN": 1.0, "CONFIRM": 3, "NEAR_NEED": 2,
+      "PERSIST_STEP": 0.4, "PERSIST_CAP": 3.0,
+      "MIN_C1": 1, "TOPK": 12, "DEBUG_MAXLVL": 4}
+LVLS = {"eng": None, "src": None, "seq": 0, "out": []}
+
+
+def _ls_clamp(v, lo, hi):
+    return lo if v < lo else (hi if v > hi else v)
+
+
+def _ls_lvlw(s1):
+    if s1 <= LS["LV_FULL"]:
+        return 1.0
+    return max(LS["LV_MIN"], 1.0 - LS["LV_DECAY"] * (s1 - LS["LV_FULL"]))
+
+
+def _ls_base(x):
+    n = x.get("c1") or 0
+    if n <= 0:
+        return 0.0
+    p = _ls_clamp((x.get("pct") or 0) / 100.0, 0.0, 1.0)
+    ps = (p * n + LS["PRIOR_P"] * LS["PRIOR_K"]) / (n + LS["PRIOR_K"])
+    ns = n + LS["PRIOR_K"]
+    z2 = LS["Z"] * LS["Z"]
+    dd = 1.0 + z2 / ns
+    mm = ps + z2 / (2.0 * ns)
+    ss = LS["Z"] * math.sqrt((ps * (1.0 - ps) + z2 / (4.0 * ns)) / ns)
+    return _ls_clamp((mm - ss) / dd, 0.0, 1.0)
+
+
+def _ls_gap(x):
+    parts = []
+    gp, cg = x.get("gap"), x.get("curGap")
+    if gp is not None and cg is not None and gp > 0 and cg >= 0:
+        parts.append(_ls_clamp(cg / float(gp), 0.0, 1.0))
+    if not parts:
+        return 0.5
+    g = sum(parts) / len(parts)
+    gcn = x.get("gapCount")
+    if gcn is not None and gcn >= 0:
+        g = 0.5 + (g - 0.5) * (gcn / (gcn + 3.0))
+    return _ls_clamp(g, 0.0, 1.0)
+
+
+def _ls_recent(pl):
+    if not pl:
+        return 0.5
+    return (pl["n3"] - pl["losses"] + 1.0) / (pl["n3"] + 2.0)
+
+
+def _ls_eta(x, pl):
+    c = int(x.get("c") or 60)
+    d = ((x["r"] - int(time.time()) % c) % c + c) % c
+    if not pl or pl["kind"] == "NONE":
+        return 1e9 + d
+    if pl["kind"] == "FUT":
+        return d + max(0, pl["need"] - 1) * c
+    return d
+
+
+def _ls_time(x, pl):
+    if not pl or pl["kind"] == "NONE":
+        return 0.0
+    eta = _ls_eta(x, pl)
+    if eta >= 1e9:
+        return 0.0
+    b = int(eta // max(60, int(x.get("c") or 60)))
+    return _ls_clamp(1.0 - b / float(LS["TIME_BUCKETS"]), 0.0, 1.0)
+
+
+def _ls_core(x, pl, cheap):
+    rec = 0.5 if cheap else _ls_recent(pl)
+    tim = 0.5 if cheap else _ls_time(x, pl)
+    tot = LS["W_BASE"] + LS["W_REC"] + LS["W_GAP"] + LS["W_TIME"]
+    s = LS["W_BASE"] * _ls_base(x) + LS["W_REC"] * rec + LS["W_GAP"] * _ls_gap(x) + LS["W_TIME"] * tim
+    s = 100.0 * s / tot * _ls_lvlw(x["s1"])
+    if not cheap and pl and pl["missed"]:
+        s -= LS["MISS_PEN"]
+    return _ls_clamp(s, 0.0, 100.0)
+
+
+def _ls_plan(x, prices, fin, start):
+    try:
+        p = _bot_plan(x, prices, fin, len(prices), start)
+    except Exception:
+        return None
+    outs = [h["res"] for h in p["hist"] if h["res"] in ("win", "loss")][-3:]
+    return {"kind": p["kind"], "idx": p["idx"], "need": p["need"], "missed": bool(p.get("missed")),
+            "n3": len(outs), "losses": outs.count("loss")}
+
+
+def _ls_key(x):
+    return (x["c"], x["r"], x["s1"], x["col"])
+
+
+def _ls_sortkey(rw):
+    x = rw["x"]
+    return (-round(rw["sc"], 6), -(x.get("c1") or 0), x["c"], x["r"], rw["k"])
+
+
+def _ls_pinned(x):
+    return LVLS.get("pin") == _ls_key(x)
+
+
+def _lv_label(rw):
+    x = rw["x"]
+    return "C%s R%s %s%%/%s s%.1f" % (x["c"], x["r"], x["pct"], x.get("c1") or 0, rw["sc"])
+
+
+def _lv_state(sig):
+    E = LVLS["eng"]
+    if not E or E["sig"] != sig:
+        E = {"sig": sig, "lv": {}}
+        LVLS["eng"] = E
+    return E
+
+
+def _lv_decide(E, lk, rows, mark, logs, s1):
+    st = E["lv"].get(lk)
+    top = rows[0]
+    inc = None
+    if st:
+        for rw in rows:
+            if rw["k"] == st["key"]:
+                inc = rw
+                break
+    cur, why = None, ""
+    if st and inc:
+        if inc["pl"] and inc["pl"]["missed"] and top["k"] != inc["k"]:
+            why = "missed"
+        else:
+            cur = inc
+    elif st:
+        why = "gone"
+    tag = "X%d" % s1
+    if cur is None:
+        for rw in rows:
+            if _ls_pinned(rw["x"]) and not (rw["pl"] and rw["pl"]["missed"]):
+                top = rw
+                break
+        E["lv"][lk] = {"key": top["k"], "streak": 1, "chal_key": None, "chal_n": 0, "mark": mark}
+        logs.append("%s %s%s" % (tag, ("DROP(%s) -> " % why) if st else "NEW ", _lv_label(top)))
+        return top
+    new_scan = st["mark"] != mark
+    if new_scan:
+        st["mark"] = mark
+        st["streak"] += 1
+    pl = cur["pl"]
+    near = bool(pl) and (pl["kind"] == "FIRED" or (pl["kind"] == "FUT" and pl["need"] <= LS["NEAR_NEED"]))
+    hold = near or _ls_pinned(cur["x"])
+    bonus = min(LS["PERSIST_CAP"], LS["PERSIST_STEP"] * st["streak"])
+    cur_eff = cur["sc"] + bonus
+    chal = None
+    for rw in rows:
+        if rw["k"] != cur["k"]:
+            chal = rw
+            break
+    bad_run = bool(pl) and pl["n3"] >= 3 and pl["losses"] >= 2
+    need = LS["MARGIN_BADRUN"] if bad_run else LS["MARGIN"]
+    diff = (chal["sc"] - cur_eff) if chal else -999.0
+    better = chal is not None and diff >= need and diff > 0
+    if new_scan:
+        if better:
+            if st["chal_key"] == chal["k"]:
+                st["chal_n"] += 1
+            else:
+                st["chal_key"], st["chal_n"] = chal["k"], 1
+        else:
+            st["chal_key"], st["chal_n"] = None, 0
+    note = ""
+    if better and st["chal_key"] == chal["k"] and st["chal_n"] >= LS["CONFIRM"]:
+        if hold:
+            note = "HOLD(%s) chal %d/%d gap %.1f" % ("fire" if near else "pin", st["chal_n"], LS["CONFIRM"], diff)
+        else:
+            E["lv"][lk] = {"key": chal["k"], "streak": 1, "chal_key": None, "chal_n": 0, "mark": mark}
+            logs.append("%s SWAP %s(+%.1f) -> %s gap %.1f after %d scans" % (tag, _lv_label(cur), bonus, _lv_label(chal), diff, LS["CONFIRM"]))
+            return chal
+    elif better:
+        note = "CHAL %d/%d gap %.1f" % (st["chal_n"] if st["chal_key"] == chal["k"] else 0, LS["CONFIRM"], diff)
+    else:
+        note = ("KEEP gap %.1f < %.1f" % (diff, need)) if chal else "KEEP no rival"
+    if new_scan and s1 <= LS["DEBUG_MAXLVL"]:
+        logs.append("%s cur=%s(+%.1f,n%d)%s %s" % (tag, _lv_label(cur), bonus, st["streak"], (" chal=" + _lv_label(chal)) if chal else "", note))
+    return cur
+
+
+def _lvls_update(revs, r0_only):
+    if LVLS["src"] is revs:
+        return
+    prices, start = S.get("prices"), S.get("start")
+    if not prices or start is None:
+        return
+    LVLS["src"] = revs
+    LVLS["seq"] += 1
+    mark = LVLS["seq"]
+    fin = max(0, min(int(_bot_now() - start) - 1, S.get("maxidx", 0), len(prices) - 1))
+    E = _lv_state((CFG.symbol, CFG.min_c, CFG.max_c, bool(r0_only), CFG.session, start))
+    by = {}
+    for x in revs:
+        if r0_only and x["r"] != 0:
+            continue
+        if (x.get("c1") or 0) < LS["MIN_C1"]:
+            continue
+        by.setdefault(x["s1"], []).append(x)
+    winners, logs = [], []
+    for s1 in sorted(by):
+        lk = "REV|%d" % s1
+        st = E["lv"].get(lk)
+        pre = [{"x": x, "k": _ls_key(x), "sc": _ls_core(x, None, True), "pl": None} for x in by[s1]]
+        pre.sort(key=_ls_sortkey)
+        sel = [rw for j, rw in enumerate(pre)
+               if j < LS["TOPK"] or (st and rw["k"] == st["key"]) or _ls_pinned(rw["x"])]
+        for rw in sel:
+            rw["pl"] = _ls_plan(rw["x"], prices, fin, start)
+            rw["sc"] = _ls_core(rw["x"], rw["pl"], False)
+        sel.sort(key=_ls_sortkey)
+        winners.append(_lv_decide(E, lk, sel, mark, logs, s1))
+    live = set("REV|%d" % s for s in by)
+    for kk in list(E["lv"]):
+        if kk not in live:
+            del E["lv"][kk]
+    winners.sort(key=_ls_sortkey)
+    out = []
+    for w in winners:
+        y = dict(w["x"])
+        y["lv"] = round(w["sc"], 1)
+        out.append(y)
+    LVLS["out"] = out
+    if logs:
+        elog("INFO", "LVLS " + " | ".join(logs))
+
+
 def _wilson(pct, n):
     if n <= 0:
         return 0.0
@@ -1144,7 +1386,7 @@ def _sig_key(x):
 
 
 def _filter_sig():
-    return (CFG.symbol, CFG.min_pct, CFG.level, bool(getattr(CFG, "r0_only", False)), CFG.session, S.get("start"))
+    return (CFG.symbol, CFG.min_c, CFG.max_c, bool(getattr(CFG, "r0_only", False)), CFG.session, S.get("start"))
 
 
 def _bot_reset(why):
@@ -1154,6 +1396,10 @@ def _bot_reset(why):
 
 
 def _bot_reset_session():
+    LVLS["eng"] = None
+    LVLS["src"] = None
+    LVLS["out"] = []
+    LVLS["pin"] = None
     BOT["lock"] = None
     BOT["fsig"] = None
     BOT.update(champ=None, strikes=0, chal_key=None, chal_n=0, scan_at=None)
@@ -1303,6 +1549,80 @@ def _champ_apply(lst):
         BOT["chal_key"], BOT["chal_n"] = None, 0
 
 
+def _lv_sig(x):
+    y = dict(x)
+    y["pair"] = CFG.symbol
+    y["type"] = "REV"
+    y["score"] = x.get("lv", 0.0)
+    return y
+
+
+def _lv_crown(x, why):
+    y = _lv_sig(x)
+    BOT["champ"] = {"key": _sig_key(y), "sig": y, "score": y["score"],
+                    "wil": _wilson(y["pct"], y["c1"]), "since": int(time.time())}
+    BOT["strikes"], BOT["chal_key"], BOT["chal_n"] = 0, None, 0
+    LVLS["pin"] = None
+    elog("INFO", "BOT CHAMPION %s C%s R%s X%s %s c1=%s pct=%s%% lvls=%.1f (%s)" % (
+        _sig_key(y), y["c"], y["r"], y["s1"], y["col"], y["c1"], y["pct"], y["score"], why))
+
+
+def _champ_apply_lvls():
+    out = LVLS["out"]
+    prices, start = S.get("prices"), S.get("start")
+    if not out or not prices or start is None:
+        return
+    fin = max(0, min(int(_bot_now() - start) - 1, S.get("maxidx", 0), len(prices) - 1))
+    ch = BOT["champ"]
+    if ch is None:
+        _lv_crown(out[0], "seat was empty")
+        return
+    k = _ls_key(ch["sig"])
+    cur = next((x for x in out if _ls_key(x) == k), None)
+    if cur is not None and not (CFG.min_c <= cur["c"] <= CFG.max_c):
+        cur = None
+    sg = cur or ch["sig"]
+    plan = _bot_plan(sg, prices, fin, len(prices), start)
+    lk = BOT["lock"]
+    locked = bool(lk) and (_bot_now() - start) < lk["end"]
+    inflight = locked or plan["kind"] == "FIRED" or (plan["kind"] == "FUT" and plan["need"] <= LS["NEAR_NEED"])
+    top = out[0]
+    if cur is None or (plan.get("missed") and _ls_key(top) != k):
+        nxt = next((x for x in out if _ls_key(x) != k), None)
+        elog("WARN", "BOT DETHRONED %s (%s)" % (ch["key"], "gone from level winners" if cur is None else "missed"))
+        if nxt is not None:
+            _lv_crown(nxt, "replacement")
+        else:
+            BOT.update(champ=None, strikes=0, chal_key=None, chal_n=0)
+            LVLS["pin"] = None
+            elog("WARN", "BOT champion seat vacant - no level winner")
+        return
+    y = _lv_sig(cur)
+    ch["sig"], ch["score"], ch["wil"] = y, y["score"], _wilson(y["pct"], y["c1"])
+    st = ((LVLS["eng"] or {}).get("lv") or {}).get("REV|%d" % cur["s1"]) or {}
+    bonus = min(LS["PERSIST_CAP"], LS["PERSIST_STEP"] * st.get("streak", 0))
+    cur_eff = cur["lv"] + bonus
+    outs = [h["res"] for h in plan["hist"] if h["res"] in ("win", "loss")][-3:]
+    bad_run = len(outs) >= 3 and outs.count("loss") >= 2
+    need = LS["MARGIN_BADRUN"] if bad_run else LS["MARGIN"]
+    chal = next((x for x in out if _ls_key(x) != k), None)
+    diff = (chal["lv"] - cur_eff) if chal is not None else -999.0
+    if chal is not None and diff >= need and diff > 0:
+        ck = _sig_key(_lv_sig(chal))
+        BOT["chal_n"] = BOT["chal_n"] + 1 if BOT["chal_key"] == ck else 1
+        BOT["chal_key"] = ck
+        if BOT["chal_n"] >= LS["CONFIRM"]:
+            if inflight:
+                elog("INFO", "BOT HOLD %s (in flight) challenger %s %d/%d gap %.1f" % (ch["key"], ck, BOT["chal_n"], LS["CONFIRM"], diff))
+            else:
+                elog("INFO", "BOT CHALLENGER %s beat champion %s for %d scans gap %.1f" % (ck, ch["key"], BOT["chal_n"], diff))
+                _lv_crown(chal, "challenger")
+                return
+    else:
+        BOT["chal_key"], BOT["chal_n"] = None, 0
+    LVLS["pin"] = k if inflight else None
+
+
 def _bot_skip(fid, why):
     if BOT["skip"] != (fid, why):
         BOT["skip"] = (fid, why)
@@ -1315,8 +1635,9 @@ def _bot_payout_ok(champ):
         elog("WARN", "BOT payout unknown (no fresh quote) - entering without the breakeven check")
         return True, ""
     be = 100.0 / (1.0 + q["pct"] / 100.0)
-    if champ["score"] < be:
-        return False, "score %.1f below breakeven %.1f (payout %s%%)" % (champ["score"], be, q["pct"])
+    hit = champ.get("wil", champ["score"])
+    if hit < be:
+        return False, "hit rate %.1f below breakeven %.1f (payout %s%%)" % (hit, be, q["pct"])
     return True, ""
 
 
@@ -1471,7 +1792,7 @@ async def auto_trader():
             pool = S["bot_pool"]
             if pool["sig"] == fsig and pool["at"] != BOT["scan_at"]:
                 BOT["scan_at"] = pool["at"]
-                _champ_apply(_bot_list(pool["list"]))
+                _champ_apply_lvls()
             start = S["start"]
             lk = BOT["lock"]
             if lk and _bot_now() - start >= lk["end"]:

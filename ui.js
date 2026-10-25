@@ -286,10 +286,54 @@ function _buildTop10(list) {
     for (var i = 0; i < sorted.length; i++) { var _pc = seen[sorted[i].pair] || 0; if (_pc < 10) { seen[sorted[i].pair] = _pc + 1; unique.push(sorted[i]); } }
     return unique;
 }
+var lvlsOn = true, lvlsOrd = true;
+function _lvList() {
+    if (!S) return [];
+    var src = lvlsOn ? (S.lvls || []) : (S.scan && S.scan.top ? S.scan.top : []);
+    return src.map(function (x) { return Object.assign({ pair: S.symbol, type: 'REV' }, x); });
+}
+function _lvPick() {
+    var list = _lvList();
+    if (!lvlsOn) return _buildTop10(list);
+    var out = list.filter(function (x) { return !r0OnlyMode || x.r === 0; });
+    if (lvlsOrd) {
+        out.sort(function (a, b) { return a.s1 - b.s1; });
+    } else {
+        var ck = (S.bot && S.bot.champion) ? S.bot.champion : null;
+        if (ck) {
+            for (var i = 0; i < out.length; i++) {
+                if ([S.symbol, out[i].c, out[i].r, out[i].s1, out[i].col, 'REV'].join('|') === ck) { out.unshift(out.splice(i, 1)[0]); break; }
+            }
+        }
+    }
+    return out;
+}
+function _lvPaint() {
+    var a = $('allLvlBtn'), o = $('ordLvlBtn');
+    if (a) {
+        a.style.background = lvlsOn ? '#2ED573' : 'var(--bg-base)';
+        a.style.color = lvlsOn ? 'var(--bg-base)' : '#FFFFFF';
+        a.style.borderColor = lvlsOn ? '#2ED573' : '#FFFFFF';
+    }
+    if (o) {
+        o.style.background = lvlsOrd ? '#2ED573' : 'var(--bg-base)';
+        o.style.color = lvlsOrd ? 'var(--bg-base)' : '#FFFFFF';
+        o.style.borderColor = lvlsOrd ? '#2ED573' : '#FFFFFF';
+    }
+    document.documentElement.classList.toggle('lvls-on', !!lvlsOn);
+}
+function toggleLvls() {
+    lvlsOn = !lvlsOn;
+    renderTables();
+}
+function toggleOrd() {
+    lvlsOrd = !lvlsOrd;
+    renderTables();
+}
 function renderTables() {
     if (!S) return;
-    var list = (S.scan && S.scan.top ? S.scan.top : []).map(function (x) { return Object.assign({ pair: S.symbol, type: 'REV' }, x); });
-    $('peaksTableBodyRev').innerHTML = _buildScannerRowsHtml(_buildTop10(list));
+    _lvPaint();
+    $('peaksTableBodyRev').innerHTML = _buildScannerRowsHtml(_lvPick());
     $('peaksTableBodyMom').innerHTML = _buildScannerRowsHtml([]);
     var _sbEl = document.getElementById('tcSideBar');
     if (_sbEl && !(window.TC && window.TC.on)) _sbEl.style.display = 'none';

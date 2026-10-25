@@ -197,6 +197,7 @@
 
     /* ------------------------------------------------------------------ signal selection */
     function tcSigList() {
+        if (S && typeof lvlsOn !== 'undefined' && lvlsOn && typeof _lvPick === 'function') return _lvPick();
         var top = (S && S.scan && S.scan.top) ? S.scan.top : [];
         return top.map(function (x) { return Object.assign({ pair: S.symbol, type: 'REV' }, x); });
     }
