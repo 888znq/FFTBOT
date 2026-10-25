@@ -1,6 +1,6 @@
 {
   "level": 1,
-  "minC": 120,
+  "minC": 30,
   "maxC": 180,
   "minPct": 80,
   "interval": 10,
