@@ -1129,6 +1129,7 @@ def _plan_fired(sig, prices, fin, base_ts):
 
 BOT_MIN_N, BOT_FLOOR, BOT_MARGIN, BOT_CONFIRM = 5, 55.0, 4.0, 3
 BOT_MAX_AGE = 2
+BOT_BREAKEVEN_GATE = str(os.environ.get("BOT_BREAKEVEN_GATE", "0")).strip() in ("1", "true", "True", "yes")
 BOT_SESSION_BUFFER = int(_num(os.environ.get("BOT_SESSION_BUFFER"), 10))
 BOT_MAX_LOSSES = int(_num(os.environ.get("BOT_MAX_LOSSES"), 5))
 BOT_DAILY_LOSS_X = _num(os.environ.get("BOT_DAILY_LOSS_X"), 10.0)
@@ -1637,6 +1638,9 @@ def _bot_payout_ok(champ):
     be = 100.0 / (1.0 + q["pct"] / 100.0)
     hit = champ.get("wil", champ["score"])
     if hit < be:
+        if not BOT_BREAKEVEN_GATE:
+            elog("WARN", "BOT entering despite hit rate %.1f below breakeven %.1f (BOT_BREAKEVEN_GATE off)" % (hit, be))
+            return True, ""
         return False, "hit rate %.1f below breakeven %.1f (payout %s%%)" % (hit, be, q["pct"])
     return True, ""
 
@@ -1676,20 +1680,49 @@ def _bot_try_fire(champ, plan, src):
     typ = "CALL" if sig["col"] == "R" else "PUT"
     AUTO["sig"] = sig
     elog("INFO", "BOT FIRE %s %s via %s age=%.1fs dur=%ds score=%.1f" % (typ, fid, src, age, dur, champ["score"]))
-    asyncio.create_task(_auto_place(typ, CFG.symbol, AUTO_STAKE, dur, fid, {"key": champ["key"], "score": round(champ["score"], 1)}))
+    try:
+        asyncio.create_task(_auto_place(typ, CFG.symbol, AUTO_STAKE, dur, fid, {"key": champ["key"], "score": round(champ["score"], 1)}))
+    except Exception as e:
+        BOT["lock"] = None
+        BOT["last_lock_id"] = ""
+        elog("ERROR", "TRADE MISSED - could not start the order task (%s): %s" % (fid, e))
+
+
+def _bot_fire_levels(fin, src, only_idx=None):
+    ch = BOT["champ"]
+    ck = ch["key"] if ch else None
+    prices, start = S["prices"], S["start"]
+    nowrel = _bot_now() - start
+    for x in list(LVLS["out"] or []):
+        y = _lv_sig(x)
+        k = _sig_key(y)
+        if k == ck:
+            continue
+        c = int(y["c"])
+        if only_idx is not None and only_idx % c != ((y["r"] - (start % c)) % c + c) % c:
+            continue
+        plan = _bot_plan(y, prices, fin, len(prices), start)
+        if plan["kind"] != "FIRED":
+            continue
+        if only_idx is not None and plan["idx"] != only_idx:
+            continue
+        if nowrel - plan["idx"] > BOT_MAX_AGE:
+            continue
+        _bot_try_fire({"key": k, "sig": y, "score": y["score"], "wil": _wilson(y["pct"], y["c1"])}, plan, src)
 
 
 def _bot_on_tick(i):
     ch = BOT["champ"]
-    if ch is None or BOT["fsig"] != _filter_sig():
+    if BOT["fsig"] != _filter_sig():
         return
-    sig = ch["sig"]
-    c = int(sig["c"])
-    if i % c != ((sig["r"] - (S["start"] % c)) % c + c) % c:
-        return
-    plan = _bot_plan(sig, S["prices"], i, len(S["prices"]), S["start"])
-    if plan["kind"] == "FIRED" and plan["idx"] == i:
-        _bot_try_fire(ch, plan, "tick")
+    if ch is not None:
+        sig = ch["sig"]
+        c = int(sig["c"])
+        if i % c == ((sig["r"] - (S["start"] % c)) % c + c) % c:
+            plan = _bot_plan(sig, S["prices"], i, len(S["prices"]), S["start"])
+            if plan["kind"] == "FIRED" and plan["idx"] == i:
+                _bot_try_fire(ch, plan, "tick")
+    _bot_fire_levels(i, "tick", i)
 
 
 def _bot_result(tr, pnl):
@@ -1724,6 +1757,13 @@ def _bot_status():
             "lossRun": BOT["loss_run"], "dayPnl": BOT["day_pnl"], "stats": BOT["stats"]}
 
 
+def _bot_unlock(tag):
+    lk = BOT["lock"]
+    if lk and lk.get("id") == tag:
+        BOT["lock"] = None
+        elog("INFO", "BOT LOCK released %s (order was not placed)" % tag)
+
+
 async def _auto_place(typ, sym, amt, dur, tag, bot=None):
     """Same as api_trade() but called directly by the server."""
     if not TRADE_ENABLED:
@@ -1732,6 +1772,7 @@ async def _auto_place(typ, sym, amt, dur, tag, bot=None):
     if not TR["ready"] or TR["ws"] is None or TR["ws"].closed:
         print("[auto] SKIPPED %s - account socket not ready" % tag, flush=True)
         elog("ERROR", "TRADE MISSED - AUTO %s %s not placed: account socket not ready (%s)" % (typ, sym, tag))
+        _bot_unlock(tag)
         return
     TR["req"] += 1
     rid = TR["req"]
@@ -1748,6 +1789,7 @@ async def _auto_place(typ, sym, amt, dur, tag, bot=None):
         TR["pending"].pop(rid, None)
         print("[auto] SEND FAILED %s: %s" % (tag, e), flush=True)
         elog("ERROR", "TRADE MISSED - AUTO send failed (%s): %s" % (tag, e))
+        _bot_unlock(tag)
         return
     print("[auto] BUY SENT %s %s %s stake=%.2f dur=%ds" % (tag, typ, sym, amt, dur), flush=True)
     elog("INFO", "AUTO BUY SENT %s %s stake=%.2f dur=%ds (%s)" % (typ, sym, amt, dur, tag))
@@ -1757,6 +1799,8 @@ async def _auto_place(typ, sym, amt, dur, tag, bot=None):
         AUTO["last"] = "%s %s %s" % (time.strftime("%H:%M:%S"), typ, "OK" if res.get("ok") else res.get("error"))
         print("[auto] RESULT %s -> %s" % (tag, "PLACED" if res.get("ok") else res.get("error")), flush=True)
         elog("INFO" if res.get("ok") else "ERROR", "AUTO RESULT %s -> %s" % (tag, "PLACED" if res.get("ok") else "TRADE MISSED - " + str(res.get("error"))))
+        if not res.get("ok"):
+            _bot_unlock(tag)
     except asyncio.TimeoutError:
         print("[auto] NO CONFIRMATION within 20s for %s" % tag, flush=True)
         elog("WARN", "AUTO NO CONFIRMATION within 20s for %s - check HIST" % tag)
@@ -1779,6 +1823,22 @@ async def auto_trader():
             if BOT["day"] != _day:
                 BOT.update(day=_day, day_pnl=0.0, loss_run=0, halt=None)
                 elog("INFO", "BOT new UTC day - loss counters and halt cleared")
+            _tn = time.time()
+            for _k, _p in list(TR["pending"].items()):
+                if _tn - _p.get("t", _tn) > 30:
+                    TR["pending"].pop(_k, None)
+                    elog("WARN", "BOT cleared a stuck pending order req=%s (no answer from Deriv for 30s) - it was blocking new trades" % _k)
+            for _k, _o in list(TR["open"].items()):
+                _over = _tn - _o.get("exp_time", _tn)
+                if _over > 20 and _tn - _o.get("sync_at", 0) > 30:
+                    _o["sync_at"] = _tn
+                    try:
+                        await _trade_send({"proposal_open_contract": 1, "contract_id": _o["contract_id"], "subscribe": 1})
+                    except Exception:
+                        pass
+                if _over > 120:
+                    TR["open"].pop(_k, None)
+                    elog("WARN", "BOT dropped contract %s - no result %ds after expiry, it was blocking new trades" % (_k, int(_over)))
             if not AUTO["on"] or not S.get("last_tick") or not S.get("scan") or not S.get("bot_pool"):
                 continue
             if AUTO["session"] != S["start"]:
@@ -1821,6 +1881,7 @@ async def auto_trader():
             plan = _bot_plan(ch["sig"], S["prices"], fin, len(S["prices"]), start)
             if plan["kind"] == "FIRED":
                 _bot_try_fire(ch, plan, "loop")
+            _bot_fire_levels(fin, "loop")
         except asyncio.CancelledError:
             raise
         except Exception:
