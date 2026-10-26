@@ -1211,7 +1211,13 @@
                 tskMom = tskMom.filter(function (x) { return tcSigKey(x) !== tskMk; });
                 tskMom.unshift(Object.assign({ pair: S.symbol, type: 'MOM', lock: 1 }, tskMc));
             }
-            tskRows = (sig ? [Object.assign({}, sig, { lock: 1 })] : []).concat(stkO).slice(0, tskMax).concat(tskMom.slice(0, tskMax));
+            var tskRv = (sig ? [sig] : []).concat(stkO), tskCk = (S && S.bot && S.bot.champion) ? S.bot.champion : '', tskCi = -1, tskCj;
+            for (tskCj = 0; tskCj < tskRv.length; tskCj++) {
+                if ([S.symbol, tskRv[tskCj].c, tskRv[tskCj].r, tskRv[tskCj].s1, tskRv[tskCj].col, 'REV'].join('|') === tskCk) { tskCi = tskCj; break; }
+            }
+            if (tskCi > 0) tskRv.unshift(tskRv.splice(tskCi, 1)[0]);
+            if (tskCi >= 0) tskRv[0] = Object.assign({}, tskRv[0], { lock: 1 });
+            tskRows = tskRv.slice(0, tskMax).concat(tskMom.slice(0, tskMax));
             var tskHR = '', tskHM = '', tskRw, tskNear = 1e9, tskNearFill = '';
             for (tskN = 0; tskN < tskRows.length; tskN++) {
                 tskS = tskRows[tskN];

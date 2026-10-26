@@ -1803,7 +1803,7 @@ def _mom_list(pool):
         y["score"] = _wilson(y["pct"], y["c1"])
         out.append(y)
     out.sort(key=lambda z: -z["score"])
-    return out[:10]
+    return out[:40]
 
 
 def _tr_busy(mom):
@@ -1822,8 +1822,6 @@ def _mom_crown(x, why):
 
 
 def _mom_apply(lst):
-    if not lst:
-        return
     prices, start = S["prices"], S["start"]
     fin = max(0, min(int(_bot_now() - start) - 1, S["maxidx"], len(prices) - 1))
     elig = [x for x in lst if x["c1"] >= BOT_MIN_N and x["score"] >= BOT_FLOOR and CFG.min_c <= x["c"] <= CFG.max_c]
