@@ -1800,7 +1800,7 @@ def _mom_list(pool):
         y = dict(x)
         y["pair"] = CFG.symbol
         y["type"] = "MOM"
-        y["score"] = _wilson(y["pct"], y["c1"])
+        y["score"] = _ls_core(y, None, True)
         out.append(y)
     out.sort(key=lambda z: -z["score"])
     return out[:40]
@@ -1815,7 +1815,7 @@ def _tr_busy(mom):
 
 
 def _mom_crown(x, why):
-    MOMB["champ"] = {"key": _mom_key(x), "sig": x, "score": x["score"], "since": int(time.time())}
+    MOMB["champ"] = {"key": _mom_key(x), "sig": x, "score": x["score"], "wil": _wilson(x["pct"], x["c1"]), "since": int(time.time())}
     MOMB["strikes"], MOMB["chal_key"], MOMB["chal_n"] = 0, None, 0
     elog("INFO", "MOM CHAMPION %s C%s R%s X%s %s c1=%s pct=%s%% score=%.1f (%s)" % (
         _mom_key(x), x["c"], x["r"], x["s1"], x["col"], x["c1"], x["pct"], x["score"], why))
@@ -1824,7 +1824,7 @@ def _mom_crown(x, why):
 def _mom_apply(lst):
     prices, start = S["prices"], S["start"]
     fin = max(0, min(int(_bot_now() - start) - 1, S["maxidx"], len(prices) - 1))
-    elig = [x for x in lst if x["c1"] >= BOT_MIN_N and x["score"] >= BOT_FLOOR and CFG.min_c <= x["c"] <= CFG.max_c]
+    elig = [x for x in lst if x["c1"] >= LS["MIN_C1"] and CFG.min_c <= x["c"] <= CFG.max_c]
     ch = MOMB["champ"]
     if ch is None:
         if elig:
@@ -1837,16 +1837,14 @@ def _mom_apply(lst):
     reason = None
     if cur is None:
         reason = "missing from the list"
-    elif cur["c1"] < BOT_MIN_N:
-        reason = "c1 %s below %d" % (cur["c1"], BOT_MIN_N)
-    elif cur["score"] < BOT_FLOOR:
-        reason = "score %.1f below floor %.0f" % (cur["score"], BOT_FLOOR)
+    elif cur["c1"] < LS["MIN_C1"]:
+        reason = "c1 %s below %d" % (cur["c1"], LS["MIN_C1"])
     else:
         outs = ["win" if h["res"] == "loss" else "loss" for h in plan["hist"] if h["res"] in ("win", "loss")][-3:]
         if outs.count("loss") >= 2:
             reason = "lost %d of its last %d results" % (outs.count("loss"), len(outs))
     if cur is not None:
-        ch["sig"], ch["score"] = cur, cur["score"]
+        ch["sig"], ch["score"], ch["wil"] = cur, cur["score"], _wilson(cur["pct"], cur["c1"])
     if reason:
         MOMB["strikes"] += 1
         elog("WARN", "MOM STRIKE %d/%d %s: %s%s" % (MOMB["strikes"], BOT_CONFIRM, ch["key"], reason, " (in flight, protected)" if inflight else ""))
