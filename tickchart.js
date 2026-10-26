@@ -1154,8 +1154,9 @@
         try { stkL = _buildTop10(tcSigList()); } catch (eStk) { stkL = []; }
         for (stkN = 0; stkN < stkL.length; stkN++) { if (tcSigKey(stkL[stkN]) !== stkSelKey) stkO.push(stkL[stkN]); }
         for (stkK = 0; stkK < stkWts.length; stkK++) stkSum += stkWts[stkK];
-        for (stkN = 0; stkN < 0; stkN++) {
-            if (stkY + stkRw > pbot) break;
+        var stkCnt = Math.max(0, Math.min(stkO.length, Math.floor((pillY - ptop - 1) / (stkRw + 2))));
+        stkY = pillY - 1 - stkCnt * (stkRw + 2);
+        for (stkN = 0; stkN < stkCnt; stkN++) {
             stkS = stkO[stkN];
             stkP = tcPlan(stkS, prices, fin, sEnd, fin);
             stkT = '--';
