@@ -4,7 +4,7 @@
   "maxC": 300,
   "minPct": 10,
   "interval": 300,
-  "session": 3600,
+  "session": 7200,
   "autoStake": 100.0,
   "auto": true,
   "symbol": "frxXAUUSD",
