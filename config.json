@@ -5,7 +5,7 @@
   "minPct": 100,
   "interval": 10,
   "session": 86400,
-  "autoStake": 1.0,
+  "autoStake": 100.0,
   "auto": true,
   "symbol": "frxXAUUSD",
   "r0Only": false
