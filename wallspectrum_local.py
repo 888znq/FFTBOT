@@ -377,12 +377,30 @@ async def scanner():
                        and (not r0o or x["r"] == 0)),
                       key=lambda x: -(x["pct"] * x["c1"]))
         keep = ("c", "r", "s1", "s2", "c1", "c2", "pct", "col", "gap", "curGap")
+        momq = []
+        for x in revs:
+            mp = 100 - x["pct"]
+            if x["c1"] > 0 and mp >= CFG.min_pct and (CFG.level == 0 or x["s1"] == CFG.level) and (not r0o or x["r"] == 0):
+                y = dict(x)
+                y["pct"] = mp
+                y["type"] = "MOM"
+                momq.append(y)
+        momq.sort(key=lambda x: -(x["pct"] * x["c1"]))
+        mseen, mom = {}, []
+        for x in momq:
+            mk = (x["pair"], x["s1"])
+            mn = mseen.get(mk, 0)
+            if mn < 10:
+                mseen[mk] = mn + 1
+                mom.append(x)
         BOT["seq"] += 1
         S["bot_pool"] = {"at": BOT["seq"], "sig": sig0,
-                         "list": [{k: x[k] for k in keep} for x in top[:120]]}
+                         "list": [{k: x[k] for k in keep} for x in top[:120]],
+                         "mom": [{k: x[k] for k in keep} for x in mom[:40]]}
         S["scan"] = {"at": now(), "ms": int((time.time() - t0) * 1000), "total": len(revs), "qualified": len(allq),
                      "wall": [{k: x[k] for k in keep} for x in top[:1]],
-                     "top": [{k: x[k] for k in keep} for x in top[:120]]}
+                     "top": [{k: x[k] for k in keep} for x in top[:120]],
+                     "mom": [{k: x[k] for k in keep} for x in mom[:10]]}
         elog("INFO", "SCAN DONE in %dms: %d signals, %d qualified (min%%=%s level=%s r0=%s)" % (S["scan"]["ms"], len(revs), len(allq), CFG.min_pct, CFG.level, r0o))
 
 
@@ -1394,12 +1412,14 @@ def _filter_sig():
 
 
 def _bot_reset(why):
+    MOMB.update(champ=None, strikes=0, chal_key=None, chal_n=0)
     if BOT["champ"] is not None:
         elog("INFO", "BOT champion reset (%s)" % why)
     BOT.update(champ=None, strikes=0, chal_key=None, chal_n=0, scan_at=None)
 
 
 def _bot_reset_session():
+    MOMB.update(champ=None, strikes=0, chal_key=None, chal_n=0, lock=None)
     LVLS["eng"] = None
     LVLS["src"] = None
     LVLS["out"] = []
@@ -1669,7 +1689,7 @@ def _bot_try_fire(champ, plan, src):
     lk = BOT["lock"]
     if lk and now_rel < lk["end"]:
         return _bot_skip(fid, "locked by %s until +%ds" % (lk["id"], int(lk["end"] - now_rel)))
-    if TR["open"] or TR["pending"]:
+    if _tr_busy(False):
         return _bot_skip(fid, "a trade is still open")
     if idx + c + BOT_SESSION_BUFFER > len(S["prices"]):
         return _bot_skip(fid, "result would land inside the session-boundary buffer")
@@ -1726,6 +1746,10 @@ def _bot_on_tick(i):
             if plan["kind"] == "FIRED" and plan["idx"] == i:
                 _bot_try_fire(ch, plan, "tick")
     _bot_fire_levels(i, "tick", i)
+    try:
+        _mom_on_tick(i)
+    except Exception as e:
+        elog("ERROR", "MOM tick error: %s" % str(e)[:160])
 
 
 def _bot_result(tr, pnl):
@@ -1757,7 +1781,176 @@ def _bot_status():
     return {"champion": ch["key"] if ch else None, "score": round(ch["score"], 1) if ch else None, "strikes": BOT["strikes"],
             "challenger": BOT["chal_key"], "challengerScans": BOT["chal_n"],
             "lock": lk["id"] if lk else None, "lockEnd": lk["end"] if lk else None, "halt": BOT["halt"],
-            "lossRun": BOT["loss_run"], "dayPnl": BOT["day_pnl"], "stats": BOT["stats"]}
+            "lossRun": BOT["loss_run"], "dayPnl": BOT["day_pnl"], "stats": BOT["stats"],
+            "momKey": MOMB["champ"]["key"] if MOMB["champ"] else None,
+            "momSig": ({k: MOMB["champ"]["sig"][k] for k in ("c", "r", "s1", "s2", "c1", "c2", "pct", "col")} if MOMB["champ"] else None),
+            "momLock": MOMB["lock"]["id"] if MOMB["lock"] else None}
+
+
+MOMB = {"champ": None, "strikes": 0, "chal_key": None, "chal_n": 0, "lock": None, "last_lock_id": "", "stale_id": "", "skip": None}
+
+
+def _mom_key(x):
+    return "%s|%s|%s|%s|%s|MOM" % (x.get("pair") or CFG.symbol, x["c"], x["r"], x["s1"], x["col"])
+
+
+def _mom_list(pool):
+    out = []
+    for x in pool or []:
+        y = dict(x)
+        y["pair"] = CFG.symbol
+        y["type"] = "MOM"
+        y["score"] = _wilson(y["pct"], y["c1"])
+        out.append(y)
+    out.sort(key=lambda z: -z["score"])
+    return out[:10]
+
+
+def _tr_busy(mom):
+    for t in list(TR["open"].values()) + list(TR["pending"].values()):
+        b = t.get("bot") or {}
+        if bool(b.get("mom")) == mom:
+            return True
+    return False
+
+
+def _mom_crown(x, why):
+    MOMB["champ"] = {"key": _mom_key(x), "sig": x, "score": x["score"], "since": int(time.time())}
+    MOMB["strikes"], MOMB["chal_key"], MOMB["chal_n"] = 0, None, 0
+    elog("INFO", "MOM CHAMPION %s C%s R%s X%s %s c1=%s pct=%s%% score=%.1f (%s)" % (
+        _mom_key(x), x["c"], x["r"], x["s1"], x["col"], x["c1"], x["pct"], x["score"], why))
+
+
+def _mom_apply(lst):
+    if not lst:
+        return
+    prices, start = S["prices"], S["start"]
+    fin = max(0, min(int(_bot_now() - start) - 1, S["maxidx"], len(prices) - 1))
+    elig = [x for x in lst if x["c1"] >= BOT_MIN_N and x["score"] >= BOT_FLOOR and CFG.min_c <= x["c"] <= CFG.max_c]
+    ch = MOMB["champ"]
+    if ch is None:
+        if elig:
+            _mom_crown(elig[0], "seat was empty")
+        return
+    cur = next((x for x in lst if _mom_key(x) == ch["key"]), None)
+    sg = cur or ch["sig"]
+    plan = _bot_plan(sg, prices, fin, len(prices), start)
+    inflight = plan["kind"] == "FIRED" or (plan["kind"] == "FUT" and plan["need"] <= 2) or _tr_busy(True)
+    reason = None
+    if cur is None:
+        reason = "missing from the list"
+    elif cur["c1"] < BOT_MIN_N:
+        reason = "c1 %s below %d" % (cur["c1"], BOT_MIN_N)
+    elif cur["score"] < BOT_FLOOR:
+        reason = "score %.1f below floor %.0f" % (cur["score"], BOT_FLOOR)
+    else:
+        outs = ["win" if h["res"] == "loss" else "loss" for h in plan["hist"] if h["res"] in ("win", "loss")][-3:]
+        if outs.count("loss") >= 2:
+            reason = "lost %d of its last %d results" % (outs.count("loss"), len(outs))
+    if cur is not None:
+        ch["sig"], ch["score"] = cur, cur["score"]
+    if reason:
+        MOMB["strikes"] += 1
+        elog("WARN", "MOM STRIKE %d/%d %s: %s%s" % (MOMB["strikes"], BOT_CONFIRM, ch["key"], reason, " (in flight, protected)" if inflight else ""))
+    else:
+        MOMB["strikes"] = 0
+    if MOMB["strikes"] >= BOT_CONFIRM and not inflight:
+        nxt = next((x for x in elig if _mom_key(x) != ch["key"]), None)
+        elog("WARN", "MOM DETHRONED %s (%d consecutive strikes)" % (ch["key"], MOMB["strikes"]))
+        if nxt is not None:
+            _mom_crown(nxt, "replacement")
+        else:
+            MOMB.update(champ=None, strikes=0, chal_key=None, chal_n=0)
+            elog("WARN", "MOM champion seat vacant - no eligible signal")
+        return
+    top = next((x for x in elig if _mom_key(x) != ch["key"]), None)
+    champ_score = cur["score"] if cur else 0.0
+    if top is not None and top["score"] > champ_score + BOT_MARGIN:
+        k = _mom_key(top)
+        MOMB["chal_n"] = MOMB["chal_n"] + 1 if MOMB["chal_key"] == k else 1
+        MOMB["chal_key"] = k
+        if MOMB["chal_n"] >= BOT_CONFIRM and not inflight:
+            elog("INFO", "MOM CHALLENGER %s beat champion %s for %d scans" % (k, ch["key"], MOMB["chal_n"]))
+            _mom_crown(top, "challenger")
+    else:
+        MOMB["chal_key"], MOMB["chal_n"] = None, 0
+
+
+def _mom_skip(fid, why):
+    if MOMB["skip"] != (fid, why):
+        MOMB["skip"] = (fid, why)
+        elog("WARN", "MOM FIRE SKIPPED %s: %s" % (fid, why))
+
+
+def _mom_try_fire(champ, plan, src):
+    sig = champ["sig"]
+    idx = plan["idx"]
+    fid = "%s|%d" % (champ["key"], idx)
+    if fid == MOMB["last_lock_id"]:
+        return
+    start = S["start"]
+    nowf = _bot_now()
+    now_rel = nowf - start
+    age = now_rel - idx
+    if age > BOT_MAX_AGE:
+        if MOMB["stale_id"] != fid:
+            MOMB["stale_id"] = fid
+            elog("WARN", "MOM stale fire ignored (%.1fs old) %s" % (age, fid))
+        return
+    c = int(sig["c"])
+    if BOT["halt"]:
+        return _mom_skip(fid, "bot halted: %s" % BOT["halt"])
+    lk = MOMB["lock"]
+    if lk and now_rel < lk["end"]:
+        return _mom_skip(fid, "locked by %s until +%ds" % (lk["id"], int(lk["end"] - now_rel)))
+    if _tr_busy(True):
+        return _mom_skip(fid, "a MOM trade is still open")
+    if idx + c + BOT_SESSION_BUFFER > len(S["prices"]):
+        return _mom_skip(fid, "result would land inside the session-boundary buffer")
+    ok, why = _bot_payout_ok(champ)
+    if not ok:
+        return _mom_skip(fid, why)
+    end = idx + c
+    dur = max(1, min(c, int(round(end - now_rel))))
+    MOMB["lock"] = {"key": champ["key"], "id": fid, "end": end, "t0": nowf}
+    MOMB["last_lock_id"] = fid
+    typ = "CALL" if sig["col"] == "G" else "PUT"
+    elog("INFO", "MOM FIRE %s %s via %s age=%.1fs dur=%ds score=%.1f" % (typ, fid, src, age, dur, champ["score"]))
+    try:
+        asyncio.create_task(_auto_place(typ, CFG.symbol, AUTO_STAKE, dur, fid, {"key": champ["key"], "score": round(champ["score"], 1), "mom": True}))
+    except Exception as e:
+        MOMB["lock"] = None
+        MOMB["last_lock_id"] = ""
+        elog("ERROR", "TRADE MISSED - could not start the MOM order task (%s): %s" % (fid, e))
+
+
+def _mom_loop():
+    start = S["start"]
+    lk = MOMB["lock"]
+    if lk and _bot_now() - start >= lk["end"]:
+        elog("INFO", "MOM LOCK released %s" % lk["id"])
+        MOMB["lock"] = None
+    ch = MOMB["champ"]
+    if ch is None or BOT["fsig"] != _filter_sig():
+        return
+    fin = min(int(_bot_now() - start) - 1, S["maxidx"], len(S["prices"]) - 1)
+    if fin < 0:
+        return
+    plan = _bot_plan(ch["sig"], S["prices"], fin, len(S["prices"]), start)
+    if plan["kind"] == "FIRED":
+        _mom_try_fire(ch, plan, "loop")
+
+
+def _mom_on_tick(i):
+    ch = MOMB["champ"]
+    if ch is None or BOT["fsig"] != _filter_sig():
+        return
+    sig = ch["sig"]
+    c = int(sig["c"])
+    if i % c == ((sig["r"] - (S["start"] % c)) % c + c) % c:
+        plan = _bot_plan(sig, S["prices"], i, len(S["prices"]), S["start"])
+        if plan["kind"] == "FIRED" and plan["idx"] == i:
+            _mom_try_fire(ch, plan, "tick")
 
 
 def _bot_unlock(tag):
@@ -1765,6 +1958,10 @@ def _bot_unlock(tag):
     if lk and lk.get("id") == tag:
         BOT["lock"] = None
         elog("INFO", "BOT LOCK released %s (order was not placed)" % tag)
+    lm = MOMB["lock"]
+    if lm and lm.get("id") == tag:
+        MOMB["lock"] = None
+        elog("INFO", "MOM LOCK released %s (order was not placed)" % tag)
 
 
 async def _auto_place(typ, sym, amt, dur, tag, bot=None):
@@ -1856,11 +2053,21 @@ async def auto_trader():
             if pool["sig"] == fsig and pool["at"] != BOT["scan_at"]:
                 BOT["scan_at"] = pool["at"]
                 _champ_apply_lvls()
+                try:
+                    _mom_apply(_mom_list(pool.get("mom")))
+                except Exception:
+                    traceback.print_exc()
+                    elog("ERROR", "mom champion error: %s" % traceback.format_exc().strip().splitlines()[-1])
             start = S["start"]
             lk = BOT["lock"]
             if lk and _bot_now() - start >= lk["end"]:
                 elog("INFO", "BOT LOCK released %s" % lk["id"])
                 BOT["lock"] = None
+            try:
+                _mom_loop()
+            except Exception:
+                traceback.print_exc()
+                elog("ERROR", "mom bot error: %s" % traceback.format_exc().strip().splitlines()[-1])
             ch = BOT["champ"]
             if ch is None:
                 continue

@@ -951,7 +951,7 @@
             var sgA = sgSlot.getBoundingClientRect(), sgB = TC.cv.getBoundingClientRect();
             if (sgA.width > 60 && sgA.height > 10) { pillW = Math.round(sgA.width); pillH = Math.round(sgA.height); pillX = Math.round(sgA.left - sgB.left); pillY = Math.round(sgA.top - sgB.top); sgOk = true; }
         }
-        if (sgSlot) sgSlot.style.setProperty('display', 'block', 'important');
+        if (sgSlot) sgSlot.style.setProperty('display', 'none', 'important');
         sgOk = false; pillW = 0; pillH = 0; pillX = plotR - 4;
         var txtMax = sgOk ? Math.max(60, plotW - 12) : Math.max(60, pillX - plotL - 12);
         ctx.save();
@@ -986,7 +986,7 @@
         var pillKind = !sig ? 'NONE' : (plan ? plan.kind : 'NONE');
         var pFill = sig ? (expUp ? TICKG : CROSSR) : PC;
         var sgDk = document.getElementById('tcDock');
-        if (sgDk && sgDk.getAttribute('data-sc') !== pFill) { sgDk.setAttribute('data-sc', pFill); sgDk.style.setProperty('--tc-sig', pFill); }
+        if (!sgDk) { sgDk = null; }
         var pTimer = '--', pProg = -1;
         if (sig && plan && live) {
             if (plan.kind === 'FIRED') {
@@ -1142,7 +1142,7 @@
             }
             tspH += '</div>';
             if (tspEl._h !== tspH) { tspEl._h = tspH; tspEl.innerHTML = tspH; }
-            tspEl.style.setProperty('display', 'block', 'important');
+            tspEl.style.setProperty('display', 'none', 'important');
             tspEl.style.pointerEvents = 'auto';
         }
 
@@ -1193,6 +1193,65 @@
             ctx.restore();
             TC.hits.push({ x: pillX, y: stkY, w: pillW, h: stkRw, sig: stkS });
             stkY += stkRw + 2;
+        }
+        var tskEl = document.getElementById('tcStack'), tskDk = document.getElementById('tcDock');
+        if (!tskEl && tskDk) {
+            tskEl = document.createElement('div');
+            tskEl.id = 'tcStack';
+            tskEl.style.cssText = 'order:0; display:flex; flex-direction:row; gap:1px; background:#000432; margin-bottom:1px;';
+            tskDk.insertBefore(tskEl, tskDk.firstChild);
+        }
+        if (tskEl && tskDk) {
+            var tskBase = tskDk.offsetHeight - tskEl.offsetHeight;
+            var tskMax = Math.max(0, Math.min(3, Math.floor((TC.H - (PADB + 12) - tskBase - 76) / 21)));
+            var tskH = '', tskN, tskS, tskP, tskT, tskF, tskC, tskI, tskFill, tskG = [2, 1.4, 1, 1, 1.4, 1, 1, 1], tskMom = [], tskRows, tskIsM;
+            try { tskMom = _buildTop10(((S && S.scan && S.scan.mom) ? S.scan.mom : []).map(function (x) { return Object.assign({ pair: S.symbol, type: 'MOM' }, x); })); } catch (eMo) { tskMom = []; }
+            var tskMc = (S && S.bot && S.bot.momSig) ? S.bot.momSig : null, tskMk = tskMc ? tcSigKey(tskMc) : '';
+            if (tskMc) {
+                tskMom = tskMom.filter(function (x) { return tcSigKey(x) !== tskMk; });
+                tskMom.unshift(Object.assign({ pair: S.symbol, type: 'MOM', lock: 1 }, tskMc));
+            }
+            tskRows = (sig ? [Object.assign({}, sig, { lock: 1 })] : []).concat(stkO).slice(0, tskMax).concat(tskMom.slice(0, tskMax));
+            var tskHR = '', tskHM = '', tskRw, tskNear = 1e9, tskNearFill = '';
+            for (tskN = 0; tskN < tskRows.length; tskN++) {
+                tskS = tskRows[tskN];
+                tskIsM = (tskS.type === 'MOM');
+                tskP = tcPlan(tskS, prices, fin, sEnd, fin);
+                tskT = '--';
+                if (live) {
+                    if (tskP.kind === 'FIRED') {
+                        tskF = (tskP.idx + tskS.c - nowSec) - ((now % 1000) / 1000);
+                        tskT = '\u25CF ' + (tskF > 0 ? (tskF >= 100 ? tcFmtIn(Math.ceil(tskF)) : tskF.toFixed(1) + 's') : 'RESULT');
+                        if (tskF > 0) TC.pulseOn = true;
+                    } else if (tskP.kind === 'FUT') {
+                        tskF = (tskP.idx - nowSec) - ((now % 1000) / 1000);
+                        tskT = tskF > 0 ? (tskF >= 100 ? tcFmtIn(Math.ceil(tskF)) : tskF.toFixed(1) + 's') : 'NOW';
+                        if (tskF > 0) TC.pulseOn = true;
+                    } else tskT = tskP.missed ? 'MISSED' : 'NO TRIGGER';
+                } else tskT = 'CLOSED';
+                tskC = [getPairDisplayName(tskS.pair), tskT, 'C' + tskS.c, 'R' + tskS.r, 'X' + tskS.s1 + '-X' + tskS.s2, String(tskS.c1), String(tskS.c2), tskS.pct + '%'];
+                tskFill = ((tskS.col === 'R') !== tskIsM) ? TICKG : CROSSR;
+                if (live && tskP.kind === 'FUT') {
+                    tskF = (tskP.idx - nowSec) - ((now % 1000) / 1000);
+                    if (tskF > -1 && tskF < tskNear) { tskNear = tskF; tskNearFill = tskFill; }
+                }
+                tskRw = '<div style="display:flex;width:100%;height:20px;gap:1px;background:#000432;' + (tskS.lock ? 'outline:2px solid #FFFFFF;outline-offset:-2px;' : '') + '">';
+                for (tskI = 0; tskI < tskC.length; tskI++) {
+                    tskRw += '<div style="flex:' + tskG[tskI] + ' 1 auto;min-width:0;overflow:hidden;display:flex;align-items:center;justify-content:center;white-space:nowrap;padding:0 ' + (tskI === tskC.length - 1 ? '5px' : '1px') + ' 0 ' + (tskI === 0 ? '5px' : '1px') + ';box-sizing:border-box;background:' + tskFill + ';color:#000432;-webkit-text-fill-color:#000432;font:800 9px JetBrains Mono,monospace;line-height:1;">' + tskC[tskI] + '</div>';
+                }
+                tskRw += '</div>';
+                if (tskIsM) tskHM += tskRw; else tskHR += tskRw;
+            }
+            tskH = '';
+            if (tskMax > 0) {
+                [['REV', tskHR], ['MOM', tskHM]].forEach(function (tk) {
+                    tskH += '<div style="flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:1px;background:#000432;"><div style="height:14px;display:flex;align-items:center;justify-content:center;background:#E2E8F0;color:#000432;-webkit-text-fill-color:#000432;font:800 9px JetBrains Mono,monospace;letter-spacing:2px;line-height:1;">' + tk[0] + '</div>' + (tk[1] || '<div style="height:20px;display:flex;align-items:center;justify-content:center;background:#000432;color:#8890b8;font:800 9px JetBrains Mono,monospace;line-height:1;">NO SIGNALS</div>') + '</div>';
+                });
+            }
+            if (tskEl._h !== tskH) { tskEl._h = tskH; tskEl.innerHTML = tskH; }
+            tskEl.style.display = tskH ? 'flex' : 'none';
+            var tskCol = tskNearFill || pFill;
+            if (tskDk.getAttribute('data-sc') !== tskCol) { tskDk.setAttribute('data-sc', tskCol); tskDk.style.setProperty('--tc-sig', tskCol); }
         }
         ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.globalAlpha = 1;
 
