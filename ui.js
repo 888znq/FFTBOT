@@ -283,10 +283,14 @@ function _buildTop10(list) {
         .filter(function (x) { return !r0OnlyMode || x.r === 0; })
         .sort(function (a, b) { return (b.pct * b.c1) - (a.pct * a.c1); });
     var seen = {}, unique = [];
-    for (var i = 0; i < sorted.length; i++) { var _pc = seen[sorted[i].pair] || 0; if (_pc < 10) { seen[sorted[i].pair] = _pc + 1; unique.push(sorted[i]); } }
+    for (var i = 0; i < sorted.length; i++) {
+        var k = sorted[i].pair + '|' + sorted[i].s1;
+        var _pc = seen[k] || 0;
+        if (_pc < 10) { seen[k] = _pc + 1; unique.push(sorted[i]); }
+    }
     return unique;
 }
-var lvlsOn = true, lvlsOrd = true;
+var lvlsOn = false, lvlsOrd = true;
 function _lvList() {
     if (!S) return [];
     var src = lvlsOn ? (S.lvls || []) : (S.scan && S.scan.top ? S.scan.top : []);

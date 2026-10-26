@@ -181,9 +181,10 @@ def top_signals(revs, min_pct=MIN_PCT, level=0, r0_only=False):
     ok.sort(key=lambda x: -(x["pct"] * x["c1"]))  # stable, like JS sort
     seen, uniq = {}, []
     for x in ok:
-        n = seen.get(x["pair"], 0)
+        k = (x["pair"], x["s1"])
+        n = seen.get(k, 0)
         if n < 10:
-            seen[x["pair"]] = n + 1
+            seen[k] = n + 1
             uniq.append(x)
     return uniq
 
@@ -373,15 +374,15 @@ async def scanner():
         r0o = bool(getattr(CFG, "r0_only", False))
         top = top_signals(revs, CFG.min_pct, CFG.level, r0o)
         allq = sorted((x for x in revs if x["pct"] >= CFG.min_pct and (CFG.level == 0 or x["s1"] == CFG.level)
-                       and (not r0o or x["r"] == 0) and x["c2"] == 0),
+                       and (not r0o or x["r"] == 0)),
                       key=lambda x: -(x["pct"] * x["c1"]))
         keep = ("c", "r", "s1", "s2", "c1", "c2", "pct", "col", "gap", "curGap")
         BOT["seq"] += 1
         S["bot_pool"] = {"at": BOT["seq"], "sig": sig0,
-                         "list": [{k: x[k] for k in keep} for x in sorted(allq, key=lambda x: -_wilson(x["pct"], x["c1"]))[:60]]}
+                         "list": [{k: x[k] for k in keep} for x in top[:120]]}
         S["scan"] = {"at": now(), "ms": int((time.time() - t0) * 1000), "total": len(revs), "qualified": len(allq),
                      "wall": [{k: x[k] for k in keep} for x in top[:1]],
-                     "top": [{k: x[k] for k in keep} for x in allq[:40]]}
+                     "top": [{k: x[k] for k in keep} for x in top[:120]]}
         elog("INFO", "SCAN DONE in %dms: %d signals, %d qualified (min%%=%s level=%s r0=%s)" % (S["scan"]["ms"], len(revs), len(allq), CFG.min_pct, CFG.level, r0o))
 
 
@@ -1342,6 +1343,8 @@ def _lvls_update(revs, r0_only):
     by = {}
     for x in revs:
         if r0_only and x["r"] != 0:
+            continue
+        if x["pct"] < CFG.min_pct or (CFG.level != 0 and x["s1"] != CFG.level):
             continue
         if (x.get("c1") or 0) < LS["MIN_C1"]:
             continue
