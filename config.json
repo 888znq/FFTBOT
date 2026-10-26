@@ -2,7 +2,7 @@
   "level": 0,
   "minC": 240,
   "maxC": 360,
-  "minPct": 80,
+  "minPct": 100,
   "interval": 60,
   "session": 86400,
   "autoStake": 100.0,
