@@ -4,7 +4,7 @@
   "maxC": 30,
   "minPct": 10,
   "interval": 30,
-  "session": 7200,
+  "session": 1800,
   "autoStake": 100.0,
   "auto": true,
   "symbol": "1HZ10V",
