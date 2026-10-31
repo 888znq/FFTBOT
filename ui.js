@@ -290,14 +290,14 @@ function _buildTop10(list) {
         .sort(function (a, b) { return (b.pct - a.pct) || ((b.c1 || 0) - (a.c1 || 0)) || (_etaKey(a) - _etaKey(b)); });
     var seen = {}, unique = [], dupSeen = {};
     for (var i = 0; i < sorted.length; i++) {
-        var rk = sorted[i].pair + '|' + sorted[i].s1 + '|' + sorted[i].s2 + '|' + sorted[i].col + '|' + sorted[i].pct + '|' + sorted[i].c1 + '|' + sorted[i].c2;
+        var rk = sorted[i].pair + '|' + sorted[i].s1 + '|' + sorted[i].s2 + '|' + sorted[i].pct + '|' + sorted[i].c1 + '|' + sorted[i].c2;
         if (dupSeen[rk]) continue;
         dupSeen[rk] = 1;
         var k = sorted[i].pair + '|' + sorted[i].s1;
         var _pc = seen[k] || 0;
         if (_pc < 20) { seen[k] = _pc + 1; unique.push(sorted[i]); }
     }
-    return unique;
+    return unique.slice(0, 10);
 }
 function _lvlBuild(list) {
     var lvl = parseInt($('levelFilterSelect').value) || 0;
@@ -319,10 +319,10 @@ function _lvlBuild(list) {
         by[lk].forEach(function (o) {
             var pn = o.z.pair;
             cnt[pn] = (cnt[pn] || 0) + 1;
-            var rk = pn + '|' + o.z.s1 + '|' + o.z.s2 + '|' + o.z.col + '|' + o.z.pct + '|' + o.z.c1 + '|' + o.z.c2;
+            var rk = pn + '|' + o.z.s1 + '|' + o.z.s2 + '|' + o.z.pct + '|' + o.z.c1 + '|' + o.z.c2;
             if (seenRes[rk]) { cnt[pn]--; return; }
             seenRes[rk] = 1;
-            if (cnt[pn] > 20) return;
+            if (cnt[pn] > 10) return;
             kept.push(o);
         });
         by[lk] = kept;

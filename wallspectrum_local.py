@@ -193,7 +193,7 @@ def top_moms(revs, min_pct=MIN_PCT, level=0, r0_only=False):
     ok.sort(key=lambda x: (-x["pct"], -(x["c1"] or 0), _eta_key(x)))
     seen, uniq, dup = {}, [], set()
     for x in ok:
-        rk = (x["pair"], x["s1"], x["s2"], x["col"], x["pct"], x["c1"], x["c2"])
+        rk = (x["pair"], x["s1"], x["s2"], x["pct"], x["c1"], x["c2"])
         if rk in dup:
             continue
         dup.add(rk)
@@ -202,7 +202,7 @@ def top_moms(revs, min_pct=MIN_PCT, level=0, r0_only=False):
         if n < 20:
             seen[k] = n + 1
             uniq.append(x)
-    return uniq
+    return uniq[:10]
 
 
 def top_signals(revs, min_pct=MIN_PCT, level=0, r0_only=False):
@@ -222,7 +222,7 @@ def top_signals(revs, min_pct=MIN_PCT, level=0, r0_only=False):
     ok.sort(key=lambda x: (-x["pct"], -(x["c1"] or 0), _eta_key(x)))
     seen, uniq, dup = {}, [], set()
     for x in ok:
-        rk = (x["pair"], x["s1"], x["s2"], x["col"], x["pct"], x["c1"], x["c2"])
+        rk = (x["pair"], x["s1"], x["s2"], x["pct"], x["c1"], x["c2"])
         if rk in dup:
             continue
         dup.add(rk)
@@ -231,7 +231,7 @@ def top_signals(revs, min_pct=MIN_PCT, level=0, r0_only=False):
         if n < 20:
             seen[k] = n + 1
             uniq.append(x)
-    return uniq
+    return uniq[:10]
 
 
 # ───────────────────────── backend: price feed ─────────────────────────
@@ -1433,7 +1433,7 @@ def _lvls_update(revs, r0_only):
         best = {}
         for x in by[s1]:
             cc = int(x.get("c") or 60)
-            rk = (x["c"], x["s2"], x["col"], x["pct"], x["c1"], x["c2"])
+            rk = (x["c"], x["s2"], x["pct"], x["c1"], x["c2"])
             d = ((x["r"] - nowu % cc) % cc + cc) % cc
             if rk not in best or d < best[rk][0]:
                 best[rk] = (d, x)
@@ -1486,12 +1486,12 @@ def _lvl_groups(revs, level, r0_only):
         for x, e in grp:
             pn = x["pair"]
             cnt[pn] = cnt.get(pn, 0) + 1
-            rk = (pn, x["s1"], x["s2"], x["col"], x["pct"], x["c1"], x["c2"])
+            rk = (pn, x["s1"], x["s2"], x["pct"], x["c1"], x["c2"])
             if rk in dup:
                 cnt[pn] -= 1
                 continue
             dup.add(rk)
-            if cnt[pn] > 20:
+            if cnt[pn] > 10:
                 continue
             kept.append(x)
         groups.append(kept)
