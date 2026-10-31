@@ -405,6 +405,14 @@ async def roller():
             S["resync"].set()
 
 
+def _set_alts(rows, revs, r0o):
+    grp = {}
+    for x in revs:
+        grp.setdefault((x["c"], x["s1"], x["s2"], x["col"], x["c1"], x["c2"]), []).append(x["r"])
+    for y in rows:
+        y["alt"] = [] if r0o else [r for r in grp.get((y["c"], y["s1"], y["s2"], y["col"], y["c1"], y["c2"]), []) if r != y["r"]]
+
+
 async def scanner():
     loop = asyncio.get_running_loop()
     while True:
@@ -425,7 +433,7 @@ async def scanner():
         allq = sorted((x for x in revs if x["pct"] >= CFG.min_pct and (CFG.level == 0 or x["s1"] == CFG.level)
                        and (not r0o or x["r"] == 0)),
                       key=lambda x: -(x["pct"] * x["c1"]))
-        keep = ("c", "r", "s1", "s2", "c1", "c2", "pct", "col", "gap", "curGap")
+        keep = ("c", "r", "s1", "s2", "c1", "c2", "pct", "col", "gap", "curGap", "alt")
         momq = []
         for x in revs:
             mp = 100 - x["pct"]
@@ -443,6 +451,8 @@ async def scanner():
                 mseen[mk] = mn + 1
                 mom.append(x)
         mom_disp = top_moms(revs, CFG.min_pct, CFG.level, r0o)
+        _set_alts(top, revs, r0o)
+        _set_alts(mom_disp, revs, r0o)
         mom_ord = [y for g in _lvl_groups(mom_disp, CFG.level, r0o) for y in g]
         BOT["seq"] += 1
         S["bot_pool"] = {"at": BOT["seq"], "sig": sig0,
@@ -1418,6 +1428,16 @@ def _lvls_update(revs, r0_only):
         if (x.get("c1") or 0) < LS["MIN_C1"]:
             continue
         by.setdefault(x["s1"], []).append(x)
+    nowu = int(time.time())
+    for s1 in list(by):
+        best = {}
+        for x in by[s1]:
+            cc = int(x.get("c") or 60)
+            rk = (x["c"], x["s2"], x["col"], x["pct"], x["c1"], x["c2"])
+            d = ((x["r"] - nowu % cc) % cc + cc) % cc
+            if rk not in best or d < best[rk][0]:
+                best[rk] = (d, x)
+        by[s1] = [v[1] for v in best.values()]
     winners, logs = [], []
     for s1 in sorted(by):
         lk = "REV|%d" % s1
