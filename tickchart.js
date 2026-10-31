@@ -1227,7 +1227,7 @@
             var tskR1 = (tskCi >= 0) ? [tskRv[tskCi]] : _top1(tskRv), tskM1 = [], tskMi;
             for (tskMi = 0; tskMi < tskMom.length; tskMi++) { if (tskMom[tskMi].lock) { tskM1 = [tskMom[tskMi]]; break; } }
             if (!tskM1.length) tskM1 = _top1(tskMom);
-            tskRows = tskR1.slice(0, Math.min(1, tskMax)).concat(tskM1.slice(0, Math.min(1, tskMax)));
+            tskRows = tskR1.slice(0, Math.min(1, tskMax));
             var tskHR = '', tskHM = '', tskRw, tskNear = 1e9, tskNearFill = '';
             for (tskN = 0; tskN < tskRows.length; tskN++) {
                 tskS = tskRows[tskN];
@@ -1260,7 +1260,7 @@
             }
             tskH = '';
             if (tskMax > 0) {
-                [['REV', tskHR], ['MOM', tskHM]].forEach(function (tk) {
+                [['REV', tskHR]].forEach(function (tk) {
                     tskH += '<div style="flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:1px;background:#000432;"><div style="height:14px;display:flex;align-items:center;justify-content:center;background:#E2E8F0;color:#000432;-webkit-text-fill-color:#000432;font:800 9px JetBrains Mono,monospace;letter-spacing:2px;line-height:1;">' + tk[0] + '</div>' + (tk[1] || '<div style="height:20px;display:flex;align-items:center;justify-content:center;background:#000432;color:#8890b8;font:800 9px JetBrains Mono,monospace;line-height:1;">NO SIGNALS</div>') + '</div>';
                 });
             }

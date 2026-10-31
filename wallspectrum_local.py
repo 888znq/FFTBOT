@@ -2117,6 +2117,7 @@ def _mom_try_fire(champ, plan, src):
 
 
 def _mom_loop():
+    return
     start = S["start"]
     lk = MOMB["lock"]
     if lk and _bot_now() - start >= lk["end"]:
@@ -2134,6 +2135,7 @@ def _mom_loop():
 
 
 def _mom_on_tick(i):
+    return
     ch = MOMB["champ"]
     if ch is None or BOT["fsig"] != _filter_sig():
         return
@@ -2245,11 +2247,6 @@ async def auto_trader():
             if pool["sig"] == fsig and pool["at"] != BOT["scan_at"]:
                 BOT["scan_at"] = pool["at"]
                 _champ_follow_top()
-                try:
-                    _mom_follow_top(pool.get("mom"))
-                except Exception:
-                    traceback.print_exc()
-                    elog("ERROR", "mom champion error: %s" % traceback.format_exc().strip().splitlines()[-1])
             start = S["start"]
             lk = BOT["lock"]
             if lk and _bot_now() - start >= lk["end"]:
