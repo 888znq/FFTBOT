@@ -179,7 +179,7 @@ def top_moms(revs, min_pct=MIN_PCT, level=0, r0_only=False):
         if n <= 1 or (x["s1"] or 0) < 1:
             continue
         mp = _js_round(x["c2"] / n * 100)
-        if mp < min_pct or (level != 0 and x["s1"] != level) or (r0_only and x["r"] != 0):
+        if (level != 0 and x["s1"] != level) or (r0_only and x["r"] != 0):
             continue
         y = dict(x)
         y["pct"] = mp
@@ -207,10 +207,10 @@ def top_moms(revs, min_pct=MIN_PCT, level=0, r0_only=False):
 
 def top_signals(revs, min_pct=MIN_PCT, level=0, r0_only=False):
     try:
-        _lvls_update(revs, r0_only)
+        _lvls_top(revs, level, r0_only)
     except Exception as e:
         elog("ERROR", "LVLS update failed: %s" % str(e)[:160])
-    ok = [x for x in revs if x["pct"] >= min_pct and (x["s1"] or 0) >= 1 and (x["c1"] or 0) >= 1
+    ok = [x for x in revs if (x["s1"] or 0) >= 1 and (x["c1"] or 0) >= 1
           and (level == 0 or x["s1"] == level)
           and (not r0_only or x["r"] == 0)]
     now_s = int(time.time())
@@ -439,14 +439,15 @@ async def scanner():
                 mseen[mk] = mn + 1
                 mom.append(x)
         mom_disp = top_moms(revs, CFG.min_pct, CFG.level, r0o)
+        mom_ord = [y for g in _lvl_groups(mom_disp, CFG.level, r0o) for y in g]
         BOT["seq"] += 1
         S["bot_pool"] = {"at": BOT["seq"], "sig": sig0,
-                         "list": [{k: x[k] for k in keep} for x in top[:120]],
-                         "mom": [{k: x[k] for k in keep} for x in mom[:40]]}
+                         "list": [{k: x[k] for k in keep} for x in top],
+                         "mom": [{k: x[k] for k in keep} for x in mom_ord]}
         S["scan"] = {"at": now(), "ms": int((time.time() - t0) * 1000), "total": len(revs), "qualified": len(allq),
                      "wall": [{k: x[k] for k in keep} for x in top[:1]],
-                     "top": [{k: x[k] for k in keep} for x in top[:120]],
-                     "mom": [{k: x[k] for k in keep} for x in mom_disp[:120]]}
+                     "top": [{k: x[k] for k in keep} for x in top],
+                     "mom": [{k: x[k] for k in keep} for x in mom_disp]}
         elog("INFO", "SCAN DONE in %dms: %d signals, %d qualified (min%%=%s level=%s r0=%s)" % (S["scan"]["ms"], len(revs), len(allq), CFG.min_pct, CFG.level, r0o))
 
 
@@ -1441,6 +1442,89 @@ def _lvls_update(revs, r0_only):
         elog("INFO", "LVLS " + " | ".join(logs))
 
 
+def _lvl_groups(revs, level, r0_only):
+    now_s = int(time.time())
+    by = {}
+    for x in revs:
+        if r0_only and x["r"] != 0:
+            continue
+        if (x["s1"] or 0) < 1 or (x["c1"] or 0) < 1:
+            continue
+        if level and x["s1"] != level:
+            continue
+        c = int(x.get("c") or 60)
+        by.setdefault(x["s1"], []).append((x, ((x["r"] - (now_s % c)) % c + c) % c))
+    groups = []
+    for s1 in sorted(by):
+        grp = by[s1]
+        grp.sort(key=lambda o: (-o[0]["pct"], -(o[0]["c1"] or 0), o[1]))
+        cnt, dup, kept = {}, set(), []
+        for x, e in grp:
+            pn = x["pair"]
+            cnt[pn] = cnt.get(pn, 0) + 1
+            rk = (pn, x["s1"], x["s2"], x["col"], x["pct"], x["c1"], x["c2"])
+            if rk in dup:
+                cnt[pn] -= 1
+                continue
+            dup.add(rk)
+            if cnt[pn] > 20:
+                continue
+            kept.append(x)
+        groups.append(kept)
+    return groups
+
+
+def _lvls_top(revs, level, r0_only):
+    out = []
+    for g in _lvl_groups(revs, level, r0_only):
+        if g:
+            y = dict(g[0])
+            y["lv"] = round(_wilson(y["pct"], y["c1"]), 1)
+            out.append(y)
+    LVLS["out"] = out
+
+
+def _champ_follow_top():
+    out = LVLS["out"]
+    prices, start = S.get("prices"), S.get("start")
+    if not out or not prices or start is None:
+        return
+    top = out[0]
+    ch = BOT["champ"]
+    if ch is None:
+        _lv_crown(top, "seat was empty")
+        return
+    if _ls_key(ch["sig"]) == _ls_key(top):
+        y = _lv_sig(top)
+        ch["sig"], ch["score"], ch["wil"] = y, y["score"], _wilson(y["pct"], y["c1"])
+        return
+    elog("WARN", "BOT DETHRONED %s (app top changed)" % ch["key"])
+    _lv_crown(top, "app top changed")
+
+
+def _mom_follow_top(pool):
+    elig = []
+    for x in pool or []:
+        y = dict(x)
+        y["pair"] = CFG.symbol
+        y["type"] = "MOM"
+        y["score"] = _ls_core(y, None, True)
+        if y["c1"] >= LS["MIN_C1"] and CFG.min_c <= y["c"] <= CFG.max_c:
+            elig.append(y)
+    if not elig:
+        return
+    top = elig[0]
+    ch = MOMB["champ"]
+    if ch is None:
+        _mom_crown(top, "seat was empty")
+        return
+    if _mom_key(ch["sig"]) == _mom_key(top):
+        ch["sig"], ch["score"], ch["wil"] = top, top["score"], _wilson(top["pct"], top["c1"])
+        return
+    elog("WARN", "MOM DETHRONED %s (app top changed)" % ch["key"])
+    _mom_crown(top, "app top changed")
+
+
 def _wilson(pct, n):
     if n <= 0:
         return 0.0
@@ -2094,9 +2178,9 @@ async def auto_trader():
             pool = S["bot_pool"]
             if pool["sig"] == fsig and pool["at"] != BOT["scan_at"]:
                 BOT["scan_at"] = pool["at"]
-                _champ_apply_lvls()
+                _champ_follow_top()
                 try:
-                    _mom_apply(_mom_list(pool.get("mom")))
+                    _mom_follow_top(pool.get("mom"))
                 except Exception:
                     traceback.print_exc()
                     elog("ERROR", "mom champion error: %s" % traceback.format_exc().strip().splitlines()[-1])

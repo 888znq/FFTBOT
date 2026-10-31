@@ -299,10 +299,47 @@ function _buildTop10(list) {
     }
     return unique;
 }
-var lvlsOn = false, lvlsOrd = true;
+function _lvlBuild(list) {
+    var lvl = parseInt($('levelFilterSelect').value) || 0;
+    var _nowU = Math.floor(Date.now() / 1000), by = {}, keys, i, x;
+    function _eta(z) { var c = z.c || 60; return (((z.r - (_nowU % c)) % c) + c) % c; }
+    function _cmp(a, b) { return (b.z.pct - a.z.pct) || ((b.z.c1 || 0) - (a.z.c1 || 0)) || (a.e - b.e); }
+    for (i = 0; i < list.length; i++) {
+        x = list[i];
+        if (r0OnlyMode && x.r !== 0) continue;
+        if ((x.s1 || 0) < 1 || (x.c1 || 0) < 1) continue;
+        if (lvl && x.s1 !== lvl) continue;
+        if (!by[x.s1]) by[x.s1] = [];
+        by[x.s1].push({ z: x, e: _eta(x) });
+    }
+    keys = Object.keys(by);
+    keys.forEach(function (lk) {
+        var cnt = {}, kept = [], seenRes = {};
+        by[lk].sort(_cmp);
+        by[lk].forEach(function (o) {
+            var pn = o.z.pair;
+            cnt[pn] = (cnt[pn] || 0) + 1;
+            var rk = pn + '|' + o.z.s1 + '|' + o.z.s2 + '|' + o.z.col + '|' + o.z.pct + '|' + o.z.c1 + '|' + o.z.c2;
+            if (seenRes[rk]) { cnt[pn]--; return; }
+            seenRes[rk] = 1;
+            if (cnt[pn] > 20) return;
+            kept.push(o);
+        });
+        by[lk] = kept;
+    });
+    if (lvlsOrd) {
+        keys.sort(function (a, b) { return (+a) - (+b); });
+    } else {
+        keys.sort(function (a, b) { return _cmp(by[a][0], by[b][0]); });
+    }
+    var out = [];
+    keys.forEach(function (k) { by[k].forEach(function (o) { out.push(o.z); }); });
+    return out;
+}
+var lvlsOn = true, lvlsOrd = true;
 function _lvList() {
     if (!S) return [];
-    var src = lvlsOn ? (S.lvls || []) : (S.scan && S.scan.top ? S.scan.top : []);
+    var src = (S.scan && S.scan.top) ? S.scan.top : [];
     return src.map(function (x) { return Object.assign({ pair: S.symbol, type: 'REV' }, x); });
 }
 function _momList() {
@@ -312,18 +349,7 @@ function _momList() {
 function _lvPick() {
     var list = _lvList();
     if (!lvlsOn) return _buildTop10(list);
-    var out = list.filter(function (x) { return !r0OnlyMode || x.r === 0; });
-    if (lvlsOrd) {
-        out.sort(function (a, b) { return a.s1 - b.s1; });
-    } else {
-        var ck = (S.bot && S.bot.champion) ? S.bot.champion : null;
-        if (ck) {
-            for (var i = 0; i < out.length; i++) {
-                if ([S.symbol, out[i].c, out[i].r, out[i].s1, out[i].col, 'REV'].join('|') === ck) { out.unshift(out.splice(i, 1)[0]); break; }
-            }
-        }
-    }
-    return out;
+    return _lvlBuild(list);
 }
 function _lvPaint() {
     var a = $('allLvlBtn'), o = $('ordLvlBtn');
@@ -351,7 +377,7 @@ function renderTables() {
     if (!S) return;
     _lvPaint();
     $('peaksTableBodyRev').innerHTML = _buildScannerRowsHtml(_lvPick());
-    $('peaksTableBodyMom').innerHTML = _buildScannerRowsHtml(_buildTop10(_momList()));
+    $('peaksTableBodyMom').innerHTML = _buildScannerRowsHtml(lvlsOn ? _lvlBuild(_momList()) : _buildTop10(_momList()));
     var _sbEl = document.getElementById('tcSideBar');
     if (_sbEl && !(window.TC && window.TC.on)) _sbEl.style.display = 'none';
 }

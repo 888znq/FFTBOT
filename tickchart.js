@@ -233,14 +233,14 @@
             TC.sessStart = start; TC.sig = null; TC.seen = {}; TC.flash = {}; TC.banner = null; TC.hitSeen = ''; TC.ready = false;
         }
         var scanAt = (S && S.scan) ? S.scan.at : null, inc = null, ki, sc0, sc1;
-        try { lst = _buildTop10(tcSigList()); } catch (e) { lst = []; }
+        try { lst = (typeof lvlsOn !== 'undefined' && lvlsOn && typeof _lvlBuild === 'function') ? tcSigList() : _buildTop10(tcSigList()); } catch (e) { lst = []; }
         var cur = TC.sig;
         if (cur && tcHasPending(cur, prices, fin, sEnd)) return;
         if (cur) {
             for (ki = 0; ki < lst.length; ki++) { if (tcSigKey(lst[ki]) === tcSigKey(cur)) { inc = lst[ki]; break; } }
         }
         best = lst.length ? lst[0] : null;
-        if (inc) {
+        if (inc && !(typeof lvlsOn !== 'undefined' && lvlsOn)) {
             sc0 = inc.pct * inc.c1;
             sc1 = best.pct * best.c1;
             if (!(sc1 > sc0)) best = inc;
@@ -1205,7 +1205,7 @@
             var tskBase = tskDk.offsetHeight - tskEl.offsetHeight;
             var tskMax = Math.max(0, Math.min(3, Math.floor((TC.H - (PADB + 12) - tskBase - 76) / 21)));
             var tskH = '', tskN, tskS, tskP, tskT, tskF, tskC, tskI, tskFill, tskG = [2, 1.4, 1, 1, 1.4, 1, 1, 1], tskMom = [], tskRows, tskIsM;
-            try { tskMom = _buildTop10(((S && S.scan && S.scan.mom) ? S.scan.mom : []).map(function (x) { return Object.assign({ pair: S.symbol, type: 'MOM' }, x); })); } catch (eMo) { tskMom = []; }
+            try { tskMom = ((typeof lvlsOn !== 'undefined' && lvlsOn && typeof _lvlBuild === 'function') ? _lvlBuild : _buildTop10)(((S && S.scan && S.scan.mom) ? S.scan.mom : []).map(function (x) { return Object.assign({ pair: S.symbol, type: 'MOM' }, x); })); } catch (eMo) { tskMom = []; }
             var tskMc = (S && S.bot && S.bot.momSig) ? S.bot.momSig : null, tskMk = tskMc ? tcSigKey(tskMc) : '';
             if (tskMc) {
                 tskMom = tskMom.filter(function (x) { return tcSigKey(x) !== tskMk; });
