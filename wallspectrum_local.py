@@ -980,6 +980,14 @@ async def _trade_msg(data):
             else:
                 pnl = _num(c.get("sell_price")) - tr["stake"]
             _trade_close(tr, pnl, c.get("exit_tick") or c.get("sell_spot") or c.get("current_spot"))
+            if tr.get("bot") and not (tr.get("bot") or {}).get("mom"):
+                if pnl > 0:
+                    if MART["n"]:
+                        elog("INFO", "MARTINGALE win - stake back to %.2f" % AUTO_STAKE)
+                    MART["n"] = 0
+                elif pnl < 0:
+                    MART["n"] += 1
+                    elog("WARN", "MARTINGALE loss #%d - next stake %.2f" % (MART["n"], _mart_stake()))
             try:
                 _bot_result(tr, pnl)
             except Exception:
@@ -1173,6 +1181,11 @@ class _AlwaysOn(dict):
 
 
 AUTO = _AlwaysOn({"on": True, "sig": None, "fired": set(), "session": None, "count": 0, "last": "-"})
+MART = {"n": 0}
+
+
+def _mart_stake():
+    return round(AUTO_STAKE * (3 ** MART["n"]), 2)
 
 
 def _plan_fired(sig, prices, fin, base_ts):
@@ -1210,8 +1223,8 @@ BOT_MIN_N, BOT_FLOOR, BOT_MARGIN, BOT_CONFIRM = 5, 55.0, 4.0, 3
 BOT_MAX_AGE = 2
 BOT_BREAKEVEN_GATE = str(os.environ.get("BOT_BREAKEVEN_GATE", "0")).strip() in ("1", "true", "True", "yes")
 BOT_SESSION_BUFFER = int(_num(os.environ.get("BOT_SESSION_BUFFER"), 10))
-BOT_MAX_LOSSES = int(_num(os.environ.get("BOT_MAX_LOSSES"), 5))
-BOT_DAILY_LOSS_X = _num(os.environ.get("BOT_DAILY_LOSS_X"), 10.0)
+BOT_MAX_LOSSES = int(_num(os.environ.get("BOT_MAX_LOSSES"), 1000000))
+BOT_DAILY_LOSS_X = _num(os.environ.get("BOT_DAILY_LOSS_X"), 1000000000000.0)
 BOT = {"champ": None, "strikes": 0, "chal_key": None, "chal_n": 0, "scan_at": None, "fsig": None, "seq": 0,
        "lock": None, "last_lock_id": "", "stale_id": "", "skip": None, "off": 0.0, "smp": collections.deque(maxlen=60),
        "stats": {}, "loss_run": 0, "day_pnl": 0.0, "day": int(time.time() // 86400), "halt": None, "qt": 0.0}
@@ -1901,7 +1914,8 @@ def _bot_try_fire(champ, plan, src):
     AUTO["sig"] = sig
     elog("INFO", "BOT FIRE %s %s via %s age=%.1fs dur=%ds score=%.1f" % (typ, fid, src, age, dur, champ["score"]))
     try:
-        asyncio.create_task(_auto_place(typ, CFG.symbol, AUTO_STAKE, dur, fid, {"key": champ["key"], "score": round(champ["score"], 1)}))
+        elog("INFO", "BOT stake %.2f (martingale step %d)" % (_mart_stake(), MART["n"]))
+        asyncio.create_task(_auto_place(typ, CFG.symbol, _mart_stake(), dur, fid, {"key": champ["key"], "score": round(champ["score"], 1)}))
     except Exception as e:
         BOT["lock"] = None
         BOT["last_lock_id"] = ""
