@@ -395,6 +395,10 @@ async def demo_feed():
 async def roller():
     while True:
         await asyncio.sleep(1)
+        if time.time() - S.get("rs_t", 0) > 300:
+            S["rs_t"] = time.time()
+            if S.get("last_tick") and not CFG.demo:
+                S["resync"].set()
         st = cur_start()
         if st != S["start"]:
             new_session(st)
