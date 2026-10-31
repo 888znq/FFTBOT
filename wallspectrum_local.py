@@ -1518,22 +1518,44 @@ def _best_row(rows):
     return best
 
 
+def _pool_find(lst, sig):
+    for x in lst:
+        if x["c"] == sig["c"] and x["s1"] == sig["s1"] and x["col"] == sig["col"] and (x["r"] == sig["r"] or sig["r"] in (x.get("alt") or [])):
+            return x
+    return None
+
+
 def _champ_follow_top():
-    out = LVLS["out"]
     prices, start = S.get("prices"), S.get("start")
-    if not out or not prices or start is None:
+    pool = (S.get("bot_pool") or {}).get("list") or []
+    if not pool or not prices or start is None:
         return
-    top = _best_row(out)
+    lst = []
+    for x in pool:
+        y = dict(x)
+        y["pair"] = CFG.symbol
+        y["type"] = "REV"
+        y["lv"] = round(_wilson(y["pct"], y["c1"]), 1)
+        lst.append(y)
     ch = BOT["champ"]
+    if ch is not None:
+        cur = _pool_find(lst, ch["sig"])
+        if cur is not None:
+            y = _lv_sig(cur)
+            y["r"] = ch["sig"]["r"]
+            ch["sig"], ch["score"], ch["wil"] = y, y["score"], _wilson(y["pct"], y["c1"])
+            return
+        fin = max(0, min(int(_bot_now() - start) - 1, S.get("maxidx", 0), len(prices) - 1))
+        plan = _bot_plan(ch["sig"], prices, fin, len(prices), start)
+        lk = BOT["lock"]
+        if (lk and (_bot_now() - start) < lk["end"]) or plan["kind"] == "FIRED" or (plan["kind"] == "FUT" and plan["need"] <= LS["NEAR_NEED"]):
+            return
+    top = _best_row(lst)
     if ch is None:
         _lv_crown(top, "seat was empty")
         return
-    if _ls_key(ch["sig"]) == _ls_key(top):
-        y = _lv_sig(top)
-        ch["sig"], ch["score"], ch["wil"] = y, y["score"], _wilson(y["pct"], y["c1"])
-        return
-    elog("WARN", "BOT DETHRONED %s (app top changed)" % ch["key"])
-    _lv_crown(top, "app top changed")
+    elog("WARN", "BOT DETHRONED %s (left the top 10)" % ch["key"])
+    _lv_crown(top, "left the top 10")
 
 
 def _mom_follow_top(pool):
@@ -1547,16 +1569,27 @@ def _mom_follow_top(pool):
             elig.append(y)
     if not elig:
         return
-    top = elig[0]
     ch = MOMB["champ"]
+    if ch is not None:
+        cur = _pool_find(elig, ch["sig"])
+        if cur is not None:
+            y = dict(cur)
+            y["r"] = ch["sig"]["r"]
+            ch["sig"], ch["score"], ch["wil"] = y, y["score"], _wilson(y["pct"], y["c1"])
+            return
+        prices, start = S.get("prices"), S.get("start")
+        if prices and start is not None:
+            fin = max(0, min(int(_bot_now() - start) - 1, S.get("maxidx", 0), len(prices) - 1))
+            plan = _bot_plan(ch["sig"], prices, fin, len(prices), start)
+            lk = MOMB["lock"]
+            if (lk and (_bot_now() - start) < lk["end"]) or _tr_busy(True) or plan["kind"] == "FIRED" or (plan["kind"] == "FUT" and plan["need"] <= LS["NEAR_NEED"]):
+                return
+    top = _best_row(elig)
     if ch is None:
         _mom_crown(top, "seat was empty")
         return
-    if _mom_key(ch["sig"]) == _mom_key(top):
-        ch["sig"], ch["score"], ch["wil"] = top, top["score"], _wilson(top["pct"], top["c1"])
-        return
-    elog("WARN", "MOM DETHRONED %s (app top changed)" % ch["key"])
-    _mom_crown(top, "app top changed")
+    elog("WARN", "MOM DETHRONED %s (left the top 10)" % ch["key"])
+    _mom_crown(top, "left the top 10")
 
 
 def _wilson(pct, n):

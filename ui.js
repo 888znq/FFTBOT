@@ -348,11 +348,11 @@ var lvlsOn = true, lvlsOrd = true;
 function _lvList() {
     if (!S) return [];
     var src = (S.scan && S.scan.top) ? S.scan.top : [];
-    return src.map(function (x) { return Object.assign({ pair: S.symbol, type: 'REV' }, x, { r: _nearR(x) }); });
+    return src.map(function (x) { return Object.assign({ pair: S.symbol, type: 'REV' }, x, { r: _nearR(x), rs: [x.r].concat(x.alt || []) }); });
 }
 function _momList() {
     if (!S || !S.scan || !S.scan.mom) return [];
-    return S.scan.mom.map(function (x) { return Object.assign({ pair: S.symbol, type: 'MOM' }, x, { r: _nearR(x) }); });
+    return S.scan.mom.map(function (x) { return Object.assign({ pair: S.symbol, type: 'MOM' }, x, { r: _nearR(x), rs: [x.r].concat(x.alt || []) }); });
 }
 function _lvPick() {
     var list = _lvList();

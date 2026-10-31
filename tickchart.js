@@ -240,6 +240,13 @@
             for (ki = 0; ki < lst.length; ki++) { if (tcSigKey(lst[ki]) === tcSigKey(cur)) { inc = lst[ki]; break; } }
         }
         best = lst.length ? (typeof _top1 === 'function' ? _top1(lst)[0] : lst[0]) : null;
+        var chP = (S && S.bot && S.bot.champion) ? String(S.bot.champion).split('|') : [], chJ, chX;
+        if (chP.length === 6) {
+            for (chJ = 0; chJ < lst.length; chJ++) {
+                chX = lst[chJ];
+                if (+chP[1] === chX.c && +chP[3] === chX.s1 && chP[4] === chX.col && (chX.rs || [chX.r]).indexOf(+chP[2]) >= 0) { best = Object.assign({}, chX, { r: +chP[2] }); break; }
+            }
+        }
         if (inc && !(typeof lvlsOn !== 'undefined' && lvlsOn)) {
             sc0 = inc.pct * inc.c1;
             sc1 = best.pct * best.c1;
@@ -1208,13 +1215,15 @@
             try { tskMom = ((typeof lvlsOn !== 'undefined' && lvlsOn && typeof _lvlBuild === 'function') ? _lvlBuild : _buildTop10)(((S && S.scan && S.scan.mom) ? S.scan.mom : []).map(function (x) { return Object.assign({ pair: S.symbol, type: 'MOM' }, x); })); } catch (eMo) { tskMom = []; }
             var tskMc = (S && S.bot && S.bot.momSig) ? S.bot.momSig : null, tskMk = tskMc ? tcSigKey(tskMc) : '';
             if (tskMc) {
-                tskMom = tskMom.map(function (x) { return (tcSigKey(x) === tskMk) ? Object.assign({}, x, { lock: 1 }) : x; });
+                tskMom = tskMom.map(function (x) { return (x.c === tskMc.c && x.s1 === tskMc.s1 && x.col === tskMc.col && (x.rs || [x.r]).indexOf(tskMc.r) >= 0) ? Object.assign({}, x, { lock: 1, r: tskMc.r }) : x; });
             }
             var tskRv = stkL.slice(), tskCk = (S && S.bot && S.bot.champion) ? S.bot.champion : '', tskCi = -1, tskCj;
+            var tskCp = tskCk.split('|'), tskCr = +tskCp[2], tskRs;
             for (tskCj = 0; tskCj < tskRv.length; tskCj++) {
-                if ([S.symbol, tskRv[tskCj].c, tskRv[tskCj].r, tskRv[tskCj].s1, tskRv[tskCj].col, 'REV'].join('|') === tskCk) { tskCi = tskCj; break; }
+                tskRs = tskRv[tskCj].rs || [tskRv[tskCj].r];
+                if (tskCp.length === 6 && +tskCp[1] === tskRv[tskCj].c && +tskCp[3] === tskRv[tskCj].s1 && tskCp[4] === tskRv[tskCj].col && tskRs.indexOf(tskCr) >= 0) { tskCi = tskCj; break; }
             }
-            if (tskCi >= 0) tskRv[tskCi] = Object.assign({}, tskRv[tskCi], { lock: 1 });
+            if (tskCi >= 0) tskRv[tskCi] = Object.assign({}, tskRv[tskCi], { lock: 1, r: tskCr });
             var tskR1 = (tskCi >= 0) ? [tskRv[tskCi]] : _top1(tskRv), tskM1 = [], tskMi;
             for (tskMi = 0; tskMi < tskMom.length; tskMi++) { if (tskMom[tskMi].lock) { tskM1 = [tskMom[tskMi]]; break; } }
             if (!tskM1.length) tskM1 = _top1(tskMom);
