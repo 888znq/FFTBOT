@@ -278,15 +278,21 @@ function _buildScannerRowsHtml(list) {
 }
 function _buildTop10(list) {
     var minPct = parseFloat($('minPctInput').value) || 0, lvl = parseInt($('levelFilterSelect').value) || 0;
+    var _nowU = Math.floor(Date.now() / 1000);
+    function _etaKey(x) { var c = x.c || 60; return (((x.r - (_nowU % c)) % c) + c) % c; }
     var sorted = list.filter(function (x) { return x.pct >= minPct; })
+        .filter(function (x) { return (x.s1 || 0) >= 1 && (x.c1 || 0) >= 1; })
         .filter(function (x) { return lvl === 0 || x.s1 === lvl; })
         .filter(function (x) { return !r0OnlyMode || x.r === 0; })
-        .sort(function (a, b) { return (b.pct * b.c1) - (a.pct * a.c1); });
-    var seen = {}, unique = [];
+        .sort(function (a, b) { return (b.pct - a.pct) || ((b.c1 || 0) - (a.c1 || 0)) || (_etaKey(a) - _etaKey(b)); });
+    var seen = {}, unique = [], dupSeen = {};
     for (var i = 0; i < sorted.length; i++) {
+        var rk = sorted[i].pair + '|' + sorted[i].s1 + '|' + sorted[i].s2 + '|' + sorted[i].col + '|' + sorted[i].pct + '|' + sorted[i].c1 + '|' + sorted[i].c2;
+        if (dupSeen[rk]) continue;
+        dupSeen[rk] = 1;
         var k = sorted[i].pair + '|' + sorted[i].s1;
         var _pc = seen[k] || 0;
-        if (_pc < 10) { seen[k] = _pc + 1; unique.push(sorted[i]); }
+        if (_pc < 20) { seen[k] = _pc + 1; unique.push(sorted[i]); }
     }
     return unique;
 }

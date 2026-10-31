@@ -176,14 +176,25 @@ def top_signals(revs, min_pct=MIN_PCT, level=0, r0_only=False):
         _lvls_update(revs, r0_only)
     except Exception as e:
         elog("ERROR", "LVLS update failed: %s" % str(e)[:160])
-    ok = [x for x in revs if x["pct"] >= min_pct and (level == 0 or x["s1"] == level)
+    ok = [x for x in revs if x["pct"] >= min_pct and (x["s1"] or 0) >= 1 and (x["c1"] or 0) >= 1
+          and (level == 0 or x["s1"] == level)
           and (not r0_only or x["r"] == 0)]
-    ok.sort(key=lambda x: -(x["pct"] * x["c1"]))  # stable, like JS sort
-    seen, uniq = {}, []
+    now_s = int(time.time())
+
+    def _eta_key(x):
+        c = int(x.get("c") or 60)
+        return ((x["r"] - (now_s % c)) % c + c) % c
+
+    ok.sort(key=lambda x: (-x["pct"], -(x["c1"] or 0), _eta_key(x)))
+    seen, uniq, dup = {}, [], set()
     for x in ok:
+        rk = (x["pair"], x["s1"], x["s2"], x["col"], x["pct"], x["c1"], x["c2"])
+        if rk in dup:
+            continue
+        dup.add(rk)
         k = (x["pair"], x["s1"])
         n = seen.get(k, 0)
-        if n < 10:
+        if n < 20:
             seen[k] = n + 1
             uniq.append(x)
     return uniq
@@ -1398,7 +1409,7 @@ def _lvls_update(revs, r0_only):
 def _wilson(pct, n):
     if n <= 0:
         return 0.0
-    p, z = pct / 100.0, 1.96
+    p, z = pct / 100.0, 1.645
     z2 = z * z
     return 100.0 * (p + z2 / (2 * n) - z * math.sqrt((p * (1 - p) + z2 / (4 * n)) / n)) / (1 + z2 / n)
 
