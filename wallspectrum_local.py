@@ -453,11 +453,10 @@ async def scanner():
         mom_disp = top_moms(revs, CFG.min_pct, CFG.level, r0o)
         _set_alts(top, revs, r0o)
         _set_alts(mom_disp, revs, r0o)
-        mom_ord = [y for g in _lvl_groups(mom_disp, CFG.level, r0o) for y in g]
         BOT["seq"] += 1
         S["bot_pool"] = {"at": BOT["seq"], "sig": sig0,
                          "list": [{k: x[k] for k in keep} for x in top],
-                         "mom": [{k: x[k] for k in keep} for x in mom_ord]}
+                         "mom": [{k: x[k] for k in keep} for x in mom_disp]}
         S["scan"] = {"at": now(), "ms": int((time.time() - t0) * 1000), "total": len(revs), "qualified": len(allq),
                      "wall": [{k: x[k] for k in keep} for x in top[:1]],
                      "top": [{k: x[k] for k in keep} for x in top],
@@ -1508,12 +1507,23 @@ def _lvls_top(revs, level, r0_only):
     LVLS["out"] = out
 
 
+def _best_row(rows):
+    now_s = int(time.time())
+    best, bk = None, None
+    for x in rows:
+        c = int(x.get("c") or 60)
+        k = (-x["pct"], -(x["c1"] or 0), ((x["r"] - (now_s % c)) % c + c) % c)
+        if bk is None or k < bk:
+            best, bk = x, k
+    return best
+
+
 def _champ_follow_top():
     out = LVLS["out"]
     prices, start = S.get("prices"), S.get("start")
     if not out or not prices or start is None:
         return
-    top = out[0]
+    top = _best_row(out)
     ch = BOT["champ"]
     if ch is None:
         _lv_crown(top, "seat was empty")
@@ -1899,7 +1909,6 @@ def _bot_on_tick(i):
             plan = _bot_plan(sig, S["prices"], i, len(S["prices"]), S["start"])
             if plan["kind"] == "FIRED" and plan["idx"] == i:
                 _bot_try_fire(ch, plan, "tick")
-    _bot_fire_levels(i, "tick", i)
     try:
         _mom_on_tick(i)
     except Exception as e:
@@ -2241,7 +2250,6 @@ async def auto_trader():
             plan = _bot_plan(ch["sig"], S["prices"], fin, len(S["prices"]), start)
             if plan["kind"] == "FIRED":
                 _bot_try_fire(ch, plan, "loop")
-            _bot_fire_levels(fin, "loop")
         except asyncio.CancelledError:
             raise
         except Exception:

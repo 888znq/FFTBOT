@@ -381,11 +381,22 @@ function toggleOrd() {
     lvlsOrd = !lvlsOrd;
     renderTables();
 }
+function _top1(list) {
+    if (!list || list.length < 2) return list || [];
+    var n = Math.floor(Date.now() / 1000), best = null, bd = 0, i, x, c, d;
+    for (i = 0; i < list.length; i++) {
+        x = list[i];
+        c = x.c || 60;
+        d = (((x.r - n % c) % c) + c) % c;
+        if (!best || x.pct > best.pct || (x.pct === best.pct && ((x.c1 || 0) > (best.c1 || 0) || ((x.c1 || 0) === (best.c1 || 0) && d < bd)))) { best = x; bd = d; }
+    }
+    return [best];
+}
 function renderTables() {
     if (!S) return;
     _lvPaint();
-    $('peaksTableBodyRev').innerHTML = _buildScannerRowsHtml(_lvPick());
-    $('peaksTableBodyMom').innerHTML = _buildScannerRowsHtml(lvlsOn ? _lvlBuild(_momList()) : _buildTop10(_momList()));
+    $('peaksTableBodyRev').innerHTML = _buildScannerRowsHtml(_top1(_lvPick()));
+    $('peaksTableBodyMom').innerHTML = _buildScannerRowsHtml(_top1(lvlsOn ? _lvlBuild(_momList()) : _buildTop10(_momList())));
     var _sbEl = document.getElementById('tcSideBar');
     if (_sbEl && !(window.TC && window.TC.on)) _sbEl.style.display = 'none';
 }
