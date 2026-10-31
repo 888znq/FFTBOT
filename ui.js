@@ -206,15 +206,18 @@ function draw() {
 /* ---- signal selection (REV path) ---- */
 function _rebuildInstances() {
     var p = lastClickedSigId.split('-'); if (p.length < 7) return;
-    var r = +p[2], s1 = +p[3], colColor = p[5];
+    var r = +p[2], s1 = +p[3], colColor = p[5], sigType = p[6];
     currentInstances = [];
     var hist = streakInstances[r] && streakInstances[r][colColor];
     if (hist) {
         var sessMaxCol = Math.floor((S.len + _cycleOff()) / CYCLE);
         Object.keys(hist).forEach(function (ls) {
             var L = parseInt(ls);
-            if (L === s1) { hist[L].forEach(function (ec) { if (ec >= 0 && ec <= sessMaxCol) currentInstances.push({ col: ec, row: r, isFalse: false }); }); }
-            else if (L > s1 && s1 >= 2) { hist[L].forEach(function (ec) { var ic = ec - (L - s1); if (ic >= 0 && ic <= sessMaxCol) currentInstances.push({ col: ic, row: r, isFalse: true }); }); }
+            if (sigType === 'MOM') {
+                if (L === s1 && s1 >= 1) { hist[L].forEach(function (ec) { if (ec >= 0 && ec <= sessMaxCol) { var nx = matrixData[ec + 1] ? matrixData[ec + 1][r] : null; if (nx && nx.p !== -1) currentInstances.push({ col: ec, row: r, isFalse: true }); } }); }
+                else if (L > s1 && s1 >= 1) { hist[L].forEach(function (ec) { var ic = ec - (L - s1); if (ic >= 0 && ic <= sessMaxCol) currentInstances.push({ col: ic, row: r, isFalse: false }); }); }
+            } else if (L === s1) { hist[L].forEach(function (ec) { if (ec >= 0 && ec <= sessMaxCol) currentInstances.push({ col: ec, row: r, isFalse: false }); }); }
+            else if (L > s1 && s1 >= 1) { hist[L].forEach(function (ec) { var ic = ec - (L - s1); if (ic >= 0 && ic <= sessMaxCol) currentInstances.push({ col: ic, row: r, isFalse: true }); }); }
         });
         currentInstances.sort(function (a, b) { return a.col - b.col; });
     }
@@ -302,6 +305,10 @@ function _lvList() {
     var src = lvlsOn ? (S.lvls || []) : (S.scan && S.scan.top ? S.scan.top : []);
     return src.map(function (x) { return Object.assign({ pair: S.symbol, type: 'REV' }, x); });
 }
+function _momList() {
+    if (!S || !S.scan || !S.scan.mom) return [];
+    return S.scan.mom.map(function (x) { return Object.assign({ pair: S.symbol, type: 'MOM' }, x); });
+}
 function _lvPick() {
     var list = _lvList();
     if (!lvlsOn) return _buildTop10(list);
@@ -344,7 +351,7 @@ function renderTables() {
     if (!S) return;
     _lvPaint();
     $('peaksTableBodyRev').innerHTML = _buildScannerRowsHtml(_lvPick());
-    $('peaksTableBodyMom').innerHTML = _buildScannerRowsHtml([]);
+    $('peaksTableBodyMom').innerHTML = _buildScannerRowsHtml(_buildTop10(_momList()));
     var _sbEl = document.getElementById('tcSideBar');
     if (_sbEl && !(window.TC && window.TC.on)) _sbEl.style.display = 'none';
 }

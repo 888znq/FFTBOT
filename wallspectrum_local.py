@@ -171,6 +171,40 @@ def scan(prices, base_ts, min_c=MIN_CYCLE, max_c=MAX_CYCLE, pair=PAIR):
     return out
 
 
+def top_moms(revs, min_pct=MIN_PCT, level=0, r0_only=False):
+    now_s = int(time.time())
+    ok = []
+    for x in revs:
+        n = x["c1"] or 0
+        if n <= 1 or (x["s1"] or 0) < 1:
+            continue
+        mp = _js_round(x["c2"] / n * 100)
+        if mp < min_pct or (level != 0 and x["s1"] != level) or (r0_only and x["r"] != 0):
+            continue
+        y = dict(x)
+        y["pct"] = mp
+        y["type"] = "MOM"
+        ok.append(y)
+
+    def _eta_key(x):
+        c = int(x.get("c") or 60)
+        return ((x["r"] - (now_s % c)) % c + c) % c
+
+    ok.sort(key=lambda x: (-x["pct"], -(x["c1"] or 0), _eta_key(x)))
+    seen, uniq, dup = {}, [], set()
+    for x in ok:
+        rk = (x["pair"], x["s1"], x["s2"], x["col"], x["pct"], x["c1"], x["c2"])
+        if rk in dup:
+            continue
+        dup.add(rk)
+        k = (x["pair"], x["s1"])
+        n = seen.get(k, 0)
+        if n < 20:
+            seen[k] = n + 1
+            uniq.append(x)
+    return uniq
+
+
 def top_signals(revs, min_pct=MIN_PCT, level=0, r0_only=False):
     try:
         _lvls_update(revs, r0_only)
@@ -404,6 +438,7 @@ async def scanner():
             if mn < 10:
                 mseen[mk] = mn + 1
                 mom.append(x)
+        mom_disp = top_moms(revs, CFG.min_pct, CFG.level, r0o)
         BOT["seq"] += 1
         S["bot_pool"] = {"at": BOT["seq"], "sig": sig0,
                          "list": [{k: x[k] for k in keep} for x in top[:120]],
@@ -411,7 +446,7 @@ async def scanner():
         S["scan"] = {"at": now(), "ms": int((time.time() - t0) * 1000), "total": len(revs), "qualified": len(allq),
                      "wall": [{k: x[k] for k in keep} for x in top[:1]],
                      "top": [{k: x[k] for k in keep} for x in top[:120]],
-                     "mom": [{k: x[k] for k in keep} for x in mom[:10]]}
+                     "mom": [{k: x[k] for k in keep} for x in mom_disp[:120]]}
         elog("INFO", "SCAN DONE in %dms: %d signals, %d qualified (min%%=%s level=%s r0=%s)" % (S["scan"]["ms"], len(revs), len(allq), CFG.min_pct, CFG.level, r0o))
 
 
