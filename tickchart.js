@@ -239,7 +239,7 @@
         if (cur) {
             for (ki = 0; ki < lst.length; ki++) { if (tcSigKey(lst[ki]) === tcSigKey(cur)) { inc = lst[ki]; break; } }
         }
-        best = lst.length ? lst[0] : null;
+        best = lst.length ? (typeof _top1 === 'function' ? _top1(lst)[0] : lst[0]) : null;
         if (inc && !(typeof lvlsOn !== 'undefined' && lvlsOn)) {
             sc0 = inc.pct * inc.c1;
             sc1 = best.pct * best.c1;
@@ -1154,7 +1154,7 @@
         try { stkL = (typeof lvlsOn !== 'undefined' && lvlsOn) ? tcSigList() : _buildTop10(tcSigList()); } catch (eStk) { stkL = []; }
         for (stkN = 0; stkN < stkL.length; stkN++) { if (tcSigKey(stkL[stkN]) !== stkSelKey) stkO.push(stkL[stkN]); }
         for (stkK = 0; stkK < stkWts.length; stkK++) stkSum += stkWts[stkK];
-        var stkCnt = Math.max(0, Math.min(stkO.length, Math.floor((pillY - ptop - 1) / (stkRw + 2))));
+        var stkCnt = 0;
         stkY = pillY - 1 - stkCnt * (stkRw + 2);
         for (stkN = 0; stkN < stkCnt; stkN++) {
             stkS = stkO[stkN];
@@ -1215,7 +1215,10 @@
                 if ([S.symbol, tskRv[tskCj].c, tskRv[tskCj].r, tskRv[tskCj].s1, tskRv[tskCj].col, 'REV'].join('|') === tskCk) { tskCi = tskCj; break; }
             }
             if (tskCi >= 0) tskRv[tskCi] = Object.assign({}, tskRv[tskCi], { lock: 1 });
-            tskRows = tskRv.slice(0, tskMax).concat(tskMom.slice(0, tskMax));
+            var tskR1 = (tskCi >= 0) ? [tskRv[tskCi]] : _top1(tskRv), tskM1 = [], tskMi;
+            for (tskMi = 0; tskMi < tskMom.length; tskMi++) { if (tskMom[tskMi].lock) { tskM1 = [tskMom[tskMi]]; break; } }
+            if (!tskM1.length) tskM1 = _top1(tskMom);
+            tskRows = tskR1.slice(0, Math.min(1, tskMax)).concat(tskM1.slice(0, Math.min(1, tskMax)));
             var tskHR = '', tskHM = '', tskRw, tskNear = 1e9, tskNearFill = '';
             for (tskN = 0; tskN < tskRows.length; tskN++) {
                 tskS = tskRows[tskN];
